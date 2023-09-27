@@ -47,40 +47,49 @@ def read():
     message = conn.recv(messageLength)
     return json.loads(message.decode("utf-8"))
 
-def send(message_bytes, verify):
+def send(net_image, send_dict):
     global conn
-    if message_bytes != None:
-        conn.sendall(message_bytes)
-    conn.sendall(len(verify).to_bytes(4, 'little'))
-    conn.sendall(bytes(verify, 'ascii'))
+
+    # image
+    if net_image != None:
+        net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
+        conn.sendall(net_image_bytes)
+    
+    # dict
+    dict_str = json.dumps(send_dict)
+
+    conn.sendall(len(dict_str).to_bytes(4, 'little'))
+    conn.sendall(dict_str.encode("utf-8"))
 
 def receive():
     message = read()
 
     width = message["resolution_x"]
     height = message["resolution_y"]
+    do_training = bool(message["train"])
+    keep_alive = bool(message["keep_alive"])
 
     if width != 0 and height != 0:
         try:
-            do_training = bool(message["train"])
             fovy = message["fov_y"]
             fovx = message["fov_x"]
             znear = message["z_near"]
             zfar = message["z_far"]
             do_shs_python = bool(message["shs_python"])
             do_rot_scale_python = bool(message["rot_scale_python"])
-            keep_alive = bool(message["keep_alive"])
             scaling_modifier = message["scaling_modifier"]
             world_view_transform = torch.reshape(torch.tensor(message["view_matrix"]), (4, 4)).cuda()
             world_view_transform[:,1] = -world_view_transform[:,1]
             world_view_transform[:,2] = -world_view_transform[:,2]
             full_proj_transform = torch.reshape(torch.tensor(message["view_projection_matrix"]), (4, 4)).cuda()
             full_proj_transform[:,1] = -full_proj_transform[:,1]
-            custom_cam = MiniCam(width, height, fovy, fovx, znear, zfar, world_view_transform, full_proj_transform)
+            timestep = message["timestep"] if "timestep" in message else None
+            custom_cam = MiniCam(width, height, fovy, fovx, znear, zfar, world_view_transform, full_proj_transform, timestep)
         except Exception as e:
             print("")
+            print(e)
             traceback.print_exc()
             raise e
         return custom_cam, do_training, do_shs_python, do_rot_scale_python, keep_alive, scaling_modifier
     else:
-        return None, None, None, None, None, None
+        return None, do_training, None, None, keep_alive, None

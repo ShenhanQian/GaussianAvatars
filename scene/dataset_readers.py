@@ -12,7 +12,8 @@
 import os
 import sys
 from PIL import Image
-from typing import NamedTuple
+from typing import NamedTuple, Optional
+from tqdm import tqdm
 from scene.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec2rotmat, \
     read_extrinsics_binary, read_intrinsics_binary, read_points3D_binary, read_points3D_text
 from utils.graphics_utils import getWorld2View2, focal2fov, fov2focal
@@ -34,6 +35,7 @@ class CameraInfo(NamedTuple):
     image_name: str
     width: int
     height: int
+    timestep: Optional[int]
 
 class SceneInfo(NamedTuple):
     point_cloud: BasicPointCloud
@@ -41,6 +43,8 @@ class SceneInfo(NamedTuple):
     test_cameras: list
     nerf_normalization: dict
     ply_path: str
+    train_meshes: Optional[dict]
+    test_meshes: Optional[dict]
 
 def getNerfppNorm(cam_info):
     def get_center_and_diag(cam_centers):
@@ -181,11 +185,15 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
 
     with open(os.path.join(path, transformsfile)) as json_file:
         contents = json.load(json_file)
-        fovx = contents["camera_angle_x"]
+        if 'camera_angle_x' in contents:
+            fovx_shared = contents["camera_angle_x"]
 
         frames = contents["frames"]
-        for idx, frame in enumerate(frames):
-            cam_name = os.path.join(path, frame["file_path"] + extension)
+        for idx, frame in tqdm(enumerate(frames), total=len(frames)):
+            file_path = frame["file_path"]
+            if extension not in frame["file_path"]:
+                file_path += extension
+            cam_name = os.path.join(path, file_path)
 
             # NeRF 'transform_matrix' is a camera-to-world transform
             c2w = np.array(frame["transform_matrix"])
@@ -209,13 +217,20 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
             image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
 
+            if 'camera_angle_x' in frame:
+                fovx = frame["camera_angle_x"]
+            else:
+                fovx = fovx_shared
             fovy = focal2fov(fov2focal(fovx, image.size[0]), image.size[1])
             FovY = fovy 
             FovX = fovx
 
-            cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1]))
+            timestep = frame["timestep_index"] if 'timestep_index' in frame else None
             
+            cam_infos.append(CameraInfo(
+                uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image, 
+                image_path=image_path, image_name=image_name, 
+                width=image.size[0], height=image.size[1], timestep=timestep))
     return cam_infos
 
 def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
@@ -254,7 +269,66 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
                            ply_path=ply_path)
     return scene_info
 
+def readMeshesFromTransforms(path, transformsfile):
+    with open(os.path.join(path, transformsfile)) as json_file:
+        contents = json.load(json_file)
+        frames = contents["frames"]
+        
+        mesh_infos = {}
+        for idx, frame in tqdm(enumerate(frames), total=len(frames)):
+            if not 'timestep_index' in frame or frame["timestep_index"] in mesh_infos:
+                continue
+
+            flame_param = dict(np.load(os.path.join(path, frame['flame_param_path'])))
+            mesh_infos[frame["timestep_index"]] = flame_param
+    return mesh_infos
+
+def readDynamicNerfInfo(path, white_background, eval, extension=".png", scene_scale=0.1, num_pts=9976):
+    print("Reading Training Transforms")
+    train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
+    train_mesh_infos = readMeshesFromTransforms(path, "transforms_train.json")
+    print("Reading Test Transforms")
+    test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
+    test_mesh_infos = readMeshesFromTransforms(path, "transforms_test.json")
+    
+    if not eval:
+        train_cam_infos.extend(test_cam_infos)
+        test_cam_infos = []
+
+    nerf_normalization = getNerfppNorm(train_cam_infos)
+
+    ply_path = os.path.join(path, "points3d.ply")
+    # Since this data set has no colmap data, we start with random points
+    print(f"Generating random point cloud ({num_pts})...")
+
+    if num_pts is None:
+        # If not bound to mesh, we create random points inside a cube
+        num_pts = 100_000
+        xyz = np.random.random((num_pts, 3)) * 2 * scene_scale - scene_scale
+    else:
+        # otherwise, xyz are used as the offset from the mesh
+        xyz = np.zeros((num_pts, 3))
+    shs = np.random.random((num_pts, 3)) / 255.0
+    pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
+
+    storePly(ply_path, xyz, SH2RGB(shs) * 255)
+
+    try:
+        pcd = fetchPly(ply_path)
+    except:
+        pcd = None
+
+    scene_info = SceneInfo(point_cloud=pcd,
+                           train_cameras=train_cam_infos,
+                           test_cameras=test_cam_infos,
+                           nerf_normalization=nerf_normalization,
+                           ply_path=ply_path,
+                           train_meshes=train_mesh_infos,
+                           test_meshes=test_mesh_infos)
+    return scene_info
+
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
-    "Blender" : readNerfSyntheticInfo
+    "DynamicNerf" : readDynamicNerfInfo,
+    "Blender" : readNerfSyntheticInfo,
 }
