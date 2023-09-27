@@ -10,7 +10,9 @@ class FlameGaussianModel(GaussianModel):
     def __init__(self, sh_degree : int, n_shape=300, n_expr=100):
         super().__init__(sh_degree)
 
-        self.face_center = None
+        self.face_center = None  # will be set in select_mesh_by_timestep
+        self.binding = None  # will be set in load_meshes
+
         self.flame_model = FlameHead(n_shape, n_expr).cuda()
     
     def load_meshes(self, train_meshes, test_meshes):
@@ -38,6 +40,8 @@ class FlameGaussianModel(GaussianModel):
         
         for k, v in self.flame_param.items():
             self.flame_param[k] = v.float().cuda()
+        
+        self.binding = torch.arange(self._xyz.shape[0]).cuda()
     
     def select_mesh_by_timestep(self, timestep):
         verts = self.flame_model(
@@ -66,7 +70,7 @@ class FlameGaussianModel(GaussianModel):
     
     @property
     def get_rotation(self):
-        rot = quaternion_multiply(self._rotation, self.face_orien_quat)
+        rot = quaternion_multiply(self._rotation, self.face_orien_quat[self.binding])
         return self.rotation_activation(rot)
     
     @property
@@ -74,10 +78,8 @@ class FlameGaussianModel(GaussianModel):
         if self.face_center is None:
             return self._xyz
         else:
-            # self._xyz.data = self.face_center.data
-            
-            xyz = torch.bmm(self.face_orien_mat, self._xyz[..., None]).squeeze(-1)
-            return xyz + self.face_center
+            xyz = torch.bmm(self.face_orien_mat[self.binding], self._xyz[..., None]).squeeze(-1)
+            return xyz + self.face_center[self.binding]
     
     # TODO: do we need to rotate the SH function?
     # @property
