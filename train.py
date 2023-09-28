@@ -109,11 +109,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if iteration == opt.iterations:
                 progress_bar.close()
 
-            # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
+            # Save and log
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
+            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             
             # Densification
             if iteration < opt.densify_until_iter:
@@ -166,10 +166,12 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         tb_writer.add_scalar('iter_time', elapsed, iteration)
 
     # Report test and samples of training set
-    if iteration in testing_iterations or iteration % 10_000 == 0:
+    if iteration in testing_iterations:
+        print("\n[ITER {}] Evaluating".format(iteration))
         torch.cuda.empty_cache()
         validation_configs = ({'name': 'test', 'cameras' : scene.getTestCameras()}, 
-                              {'name': 'train', 'cameras' : [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in range(5, 30, 5)]})
+                            #   {'name': 'train', 'cameras' : [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in range(5, 30, 5)]})
+                              {'name': 'train', 'cameras' : scene.getTrainCameras()})
 
         for config in validation_configs:
             if config['cameras'] and len(config['cameras']) > 0:
@@ -177,7 +179,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 psnr_test = 0.0
                 ssim_test = 0.0
                 lpips_test = 0.0
-                for idx, viewpoint in enumerate(config['cameras']):
+                for idx, viewpoint in tqdm(enumerate(config['cameras']), total=len(config['cameras'])):
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
                     if tb_writer and (idx < 5):
@@ -215,13 +217,17 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[10_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[10_000])
+    parser.add_argument("--interval", type=int, default=10_000)
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     args = parser.parse_args(sys.argv[1:])
-    args.save_iterations.append(args.iterations)
+    if len(args.test_iterations) == 0:
+        args.test_iterations.extend(list(range(args.interval, args.iterations, args.interval)) + [args.iterations])
+    if len(args.save_iterations) == 0:
+        args.save_iterations.extend(list(range(args.interval, args.iterations, args.interval)) + [args.iterations])
     
     print("Optimizing " + args.model_path)
 
