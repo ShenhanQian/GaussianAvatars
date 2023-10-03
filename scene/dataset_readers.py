@@ -45,6 +45,8 @@ class SceneInfo(NamedTuple):
     ply_path: str
     train_meshes: Optional[dict]
     test_meshes: Optional[dict]
+    tgt_train_meshes: Optional[dict]
+    tgt_test_meshes: Optional[dict]
 
 def getNerfppNorm(cam_info):
     def get_center_and_diag(cam_centers):
@@ -283,17 +285,42 @@ def readMeshesFromTransforms(path, transformsfile):
             mesh_infos[frame["timestep_index"]] = flame_param
     return mesh_infos
 
-def readDynamicNerfInfo(path, white_background, eval, extension=".png", scene_scale=0.1, num_pts=9976):
+def readDynamicNerfInfo(path, white_background, eval, extension=".png", scene_scale=0.1, num_pts=9976, target_path=""):
     print("Reading Training Transforms")
-    train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
+    if target_path != "":
+        train_cam_infos = readCamerasFromTransforms(target_path, "transforms_train.json", white_background, extension)
+    else:
+        train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
+    
+    print("Reading Training Meshes")
     train_mesh_infos = readMeshesFromTransforms(path, "transforms_train.json")
+    if target_path != "":
+        print("Reading Target Meshes (Training Division)")
+        tgt_train_mesh_infos = readMeshesFromTransforms(target_path, "transforms_train.json")
+    else:
+        tgt_train_mesh_infos = {}
+    
     print("Reading Test Transforms")
-    test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
+    if target_path != "":
+        test_cam_infos = readCamerasFromTransforms(target_path, "transforms_test.json", white_background, extension)
+    else:
+        test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
+    
+    print("Reading Test Meshes")
     test_mesh_infos = readMeshesFromTransforms(path, "transforms_test.json")
+    if target_path != "":
+        print("Reading Target Meshes (Test Division)")
+        tgt_test_mesh_infos = readMeshesFromTransforms(target_path, "transforms_test.json")
+    else:
+        tgt_test_mesh_infos = {}
     
     if not eval:
         train_cam_infos.extend(test_cam_infos)
         test_cam_infos = []
+        train_mesh_infos.update(test_mesh_infos)
+        test_mesh_infos = {}
+        tgt_train_mesh_infos.update(tgt_test_mesh_infos)
+        tgt_test_mesh_infos = {}
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
@@ -324,7 +351,9 @@ def readDynamicNerfInfo(path, white_background, eval, extension=".png", scene_sc
                            nerf_normalization=nerf_normalization,
                            ply_path=ply_path,
                            train_meshes=train_mesh_infos,
-                           test_meshes=test_mesh_infos)
+                           test_meshes=test_mesh_infos,
+                           tgt_train_meshes=tgt_train_mesh_infos,
+                           tgt_test_meshes=tgt_test_mesh_infos)
     return scene_info
 
 sceneLoadTypeCallbacks = {

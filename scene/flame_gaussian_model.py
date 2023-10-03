@@ -56,9 +56,12 @@ class FlameGaussianModel(GaussianModel):
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
     
-    def load_meshes(self, train_meshes, test_meshes):
+    def load_meshes(self, train_meshes, test_meshes, tgt_train_meshes, tgt_test_meshes):
         meshes = {**train_meshes, **test_meshes}
-        N = max(meshes) + 1
+        tgt_meshes = {**tgt_train_meshes, **tgt_test_meshes}
+        pose_meshes = meshes if len(tgt_meshes) == 0 else tgt_meshes
+        
+        N = max(pose_meshes) + 1
         self.flame_param = {
             'shape': torch.from_numpy(meshes[0]['shape']),
             'expr': torch.zeros([N, meshes[0]['expr'].shape[1]]),
@@ -71,7 +74,7 @@ class FlameGaussianModel(GaussianModel):
         }
         self.num_timesteps = N
 
-        for i, mesh in meshes.items():
+        for i, mesh in pose_meshes.items():
             self.flame_param['expr'][i] = torch.from_numpy(mesh['expr'])
             self.flame_param['rotation'][i] = torch.from_numpy(mesh['rotation'])
             self.flame_param['neck_pose'][i] = torch.from_numpy(mesh['neck_pose'])

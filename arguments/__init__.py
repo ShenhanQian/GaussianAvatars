@@ -47,8 +47,9 @@ class ParamGroup:
 class ModelParams(ParamGroup): 
     def __init__(self, parser, sentinel=False):
         self.sh_degree = 3
-        self._source_path = ""
-        self._model_path = ""
+        self._source_path = ""  # Path to the source data set
+        self._target_path = ""  # Path to the target data set for pose and expression transfer
+        self._model_path = ""  # Path to the folder to save trained models
         self._images = "images"
         self._resolution = -1
         self._white_background = False

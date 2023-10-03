@@ -46,7 +46,7 @@ class Scene:
             scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval)
         elif os.path.exists(os.path.join(args.source_path, "flame_param")):
             print("Found FLAME parameter, assuming dynamic NeRF data set!")
-            scene_info = sceneLoadTypeCallbacks["DynamicNerf"](args.source_path, args.white_background, args.eval)
+            scene_info = sceneLoadTypeCallbacks["DynamicNerf"](args.source_path, args.white_background, args.eval, target_path=args.target_path)
         elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
             print("Found transforms_train.json file, assuming Blender data set!")
             scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval)
@@ -88,7 +88,8 @@ class Scene:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
         
         if args.bind_to_mesh:
-            self.gaussians.load_meshes(scene_info.train_meshes, scene_info.test_meshes)
+            self.gaussians.load_meshes(scene_info.train_meshes, scene_info.test_meshes, 
+                                       scene_info.tgt_train_meshes, scene_info.tgt_test_meshes)
 
 
     def save(self, iteration):
