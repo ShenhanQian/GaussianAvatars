@@ -109,12 +109,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if iteration == opt.iterations:
                 progress_bar.close()
 
-            # Save and log
+            # Log and save
+            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
-            
+
             # Densification
             if iteration < opt.densify_until_iter:
                 # Keep track of max radii in image-space for pruning
@@ -169,9 +169,11 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
     if iteration in testing_iterations:
         print("\n[ITER {}] Evaluating".format(iteration))
         torch.cuda.empty_cache()
-        validation_configs = ({'name': 'test', 'cameras' : scene.getTestCameras()}, 
-                            #   {'name': 'train', 'cameras' : [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in range(5, 30, 5)]})
-                              {'name': 'train', 'cameras' : scene.getTrainCameras()})
+        validation_configs = (
+            # {'name': 'test', 'cameras' : scene.getTestCameras()}, 
+            # {'name': 'train', 'cameras' : [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in range(5, 30, 5)]},
+            {'name': 'train', 'cameras' : scene.getTrainCameras()[::10]},
+        )
 
         for config in validation_configs:
             if config['cameras'] and len(config['cameras']) > 0:
@@ -228,6 +230,8 @@ if __name__ == "__main__":
         args.test_iterations.extend(list(range(args.interval, args.iterations, args.interval)) + [args.iterations])
     if len(args.save_iterations) == 0:
         args.save_iterations.extend(list(range(args.interval, args.iterations, args.interval)) + [args.iterations])
+    if len(args.checkpoint_iterations) == 0:
+        args.checkpoint_iterations.extend(list(range(args.interval, args.iterations, args.interval)) + [args.iterations])
     
     print("Optimizing " + args.model_path)
 
