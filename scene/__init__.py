@@ -35,30 +35,35 @@ class CameraDataset(torch.utils.data.Dataset):
         return len(self.cameras)
 
     def __getitem__(self, idx):
-        # ---- from readCamerasFromTransforms() ----
-        camera = deepcopy(self.cameras[idx])
+        if isinstance(idx, int):
+            # ---- from readCamerasFromTransforms() ----
+            camera = deepcopy(self.cameras[idx])
 
-        image = Image.open(camera.image_path)
-        im_data = np.array(image.convert("RGBA"))
+            image = Image.open(camera.image_path)
+            im_data = np.array(image.convert("RGBA"))
 
-        norm_data = im_data / 255.0
-        arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + camera.bg * (1 - norm_data[:, :, 3:4])
-        image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
+            norm_data = im_data / 255.0
+            arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + camera.bg * (1 - norm_data[:, :, 3:4])
+            image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
 
-        # ---- from loadCam() and Camera.__init__() ----
-        resized_image_rgb = PILtoTorch(image, (camera.image_width, camera.image_height))
+            # ---- from loadCam() and Camera.__init__() ----
+            resized_image_rgb = PILtoTorch(image, (camera.image_width, camera.image_height))
 
-        image = resized_image_rgb[:3, ...]
+            image = resized_image_rgb[:3, ...]
 
-        if resized_image_rgb.shape[1] == 4:
-            gt_alpha_mask = resized_image_rgb[3:4, ...]
-            image *= gt_alpha_mask
-        
-        camera.original_image = image.clamp(0.0, 1.0)
-        camera.image_width = camera.original_image.shape[2]
-        camera.image_height = camera.original_image.shape[1]
+            if resized_image_rgb.shape[1] == 4:
+                gt_alpha_mask = resized_image_rgb[3:4, ...]
+                image *= gt_alpha_mask
+            
+            camera.original_image = image.clamp(0.0, 1.0)
+            camera.image_width = camera.original_image.shape[2]
+            camera.image_height = camera.original_image.shape[1]
 
-        return camera
+            return camera
+        elif isinstance(idx, slice):
+            return CameraDataset(self.cameras[idx])
+        else:
+            raise TypeError("Invalid argument type")
 
 class Scene:
 
