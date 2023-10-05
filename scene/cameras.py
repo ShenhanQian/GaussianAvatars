@@ -34,12 +34,12 @@ class Camera(nn.Module):
         self.image_name = image_name
         self.timestep = timestep
 
-        try:
-            self.data_device = torch.device(data_device)
-        except Exception as e:
-            print(e)
-            print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device" )
-            self.data_device = torch.device("cuda")
+        # try:
+        #     self.data_device = torch.device(data_device)
+        # except Exception as e:
+        #     print(e)
+        #     print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device" )
+        #     self.data_device = torch.device("cuda")
 
         # self.original_image = image.clamp(0.0, 1.0).to(self.data_device)
         # self.image_width = self.original_image.shape[2]

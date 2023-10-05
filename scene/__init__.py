@@ -10,6 +10,7 @@
 #
 
 import os
+from copy import deepcopy
 import random
 import json
 from typing import Union, List
@@ -25,9 +26,6 @@ from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 from utils.general_utils import PILtoTorch
 from PIL import Image
 
-import torch.multiprocessing
-# to avoid "OS Error: too many open files" when there are too many batches at DataLoader
-torch.multiprocessing.set_sharing_strategy('file_system')
 
 class CameraDataset(torch.utils.data.Dataset):
     def __init__(self, cameras: List[Camera]):
@@ -38,7 +36,7 @@ class CameraDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         # ---- from readCamerasFromTransforms() ----
-        camera = self.cameras[idx]
+        camera = deepcopy(self.cameras[idx])
 
         image = Image.open(camera.image_path)
         im_data = np.array(image.convert("RGBA"))
