@@ -48,7 +48,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
 
-    viewpoint_stack = None
+    loader_camera_train = torch.utils.data.DataLoader(scene.getTrainCameras(), batch_size=None, shuffle=True, num_workers=16, pin_memory=True, persistent_workers=True)
+    iter_camera_train = iter(loader_camera_train)
+    # viewpoint_stack = None
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -78,10 +80,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if iteration % 1000 == 0:
             gaussians.oneupSHdegree()
 
-        # Pick a random Camera
-        if not viewpoint_stack:
-            viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        try:
+            viewpoint_cam = next(iter_camera_train)
+        except StopIteration:
+            iter_camera_train = iter(loader_camera_train)
+            viewpoint_cam = next(iter_camera_train)
+
+        # # Pick a random Camera
+        # if not viewpoint_stack:
+        #     viewpoint_stack = scene.getTrainCameras().copy()
+        # viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
 
         if dataset.bind_to_mesh:
             gaussians.select_mesh_by_timestep(viewpoint_cam.timestep)

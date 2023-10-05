@@ -30,7 +30,8 @@ class CameraInfo(NamedTuple):
     T: np.array
     FovY: np.array
     FovX: np.array
-    image: np.array
+    bg: np.array
+    # image: np.array
     image_path: str
     image_name: str
     width: int
@@ -209,30 +210,30 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
 
             image_path = os.path.join(path, cam_name)
             image_name = Path(cam_name).stem
-            image = Image.open(image_path)
+            # image = Image.open(image_path)
 
-            im_data = np.array(image.convert("RGBA"))
+            # im_data = np.array(image.convert("RGBA"))
 
             bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
 
-            norm_data = im_data / 255.0
-            arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
-            image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
+            # norm_data = im_data / 255.0
+            # arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
+            # image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
 
             if 'camera_angle_x' in frame:
                 fovx = frame["camera_angle_x"]
             else:
                 fovx = fovx_shared
-            fovy = focal2fov(fov2focal(fovx, image.size[0]), image.size[1])
+            fovy = focal2fov(fov2focal(fovx, frame['w']), frame['h'])
             FovY = fovy 
             FovX = fovx
 
             timestep = frame["timestep_index"] if 'timestep_index' in frame else None
             
             cam_infos.append(CameraInfo(
-                uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image, 
+                uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, bg=bg, #image=image, 
                 image_path=image_path, image_name=image_name, 
-                width=image.size[0], height=image.size[1], timestep=timestep))
+                width=frame['w'], height=frame['h'], timestep=timestep))
     return cam_infos
 
 def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):

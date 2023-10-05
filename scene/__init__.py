@@ -12,13 +12,55 @@
 import os
 import random
 import json
-from typing import Union
+from typing import Union, List
+import numpy as np
+import torch
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import sceneLoadTypeCallbacks
+from scene.cameras import Camera
 from scene.gaussian_model import GaussianModel
 from scene.flame_gaussian_model import FlameGaussianModel
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
+from utils.general_utils import PILtoTorch
+from PIL import Image
+
+import torch.multiprocessing
+# to avoid "OS Error: too many open files" when there are too many batches at DataLoader
+torch.multiprocessing.set_sharing_strategy('file_system')
+
+class CameraDataset(torch.utils.data.Dataset):
+    def __init__(self, cameras: List[Camera]):
+        self.cameras = cameras
+
+    def __len__(self):
+        return len(self.cameras)
+
+    def __getitem__(self, idx):
+        # ---- from readCamerasFromTransforms() ----
+        camera = self.cameras[idx]
+
+        image = Image.open(camera.image_path)
+        im_data = np.array(image.convert("RGBA"))
+
+        norm_data = im_data / 255.0
+        arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + camera.bg * (1 - norm_data[:, :, 3:4])
+        image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
+
+        # ---- from loadCam() and Camera.__init__() ----
+        resized_image_rgb = PILtoTorch(image, (camera.image_width, camera.image_height))
+
+        image = resized_image_rgb[:3, ...]
+
+        if resized_image_rgb.shape[1] == 4:
+            gt_alpha_mask = resized_image_rgb[3:4, ...]
+            image *= gt_alpha_mask
+        
+        camera.original_image = image.clamp(0.0, 1.0)
+        camera.image_width = camera.original_image.shape[2]
+        camera.image_height = camera.original_image.shape[1]
+
+        return camera
 
 class Scene:
 
@@ -44,7 +86,7 @@ class Scene:
 
         if os.path.exists(os.path.join(args.source_path, "sparse")):
             scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval)
-        elif os.path.exists(os.path.join(args.source_path, "flame_param")):
+        elif os.path.exists(os.path.join(args.source_path, "canonical_flame_param.npz")):
             print("Found FLAME parameter, assuming dynamic NeRF data set!")
             scene_info = sceneLoadTypeCallbacks["DynamicNerf"](args.source_path, args.white_background, args.eval, target_path=args.target_path)
         elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
@@ -97,7 +139,7 @@ class Scene:
         self.gaussians.save_ply(os.path.join(point_cloud_path, "point_cloud.ply"))
 
     def getTrainCameras(self, scale=1.0):
-        return self.train_cameras[scale]
+        return CameraDataset(self.train_cameras[scale])
 
     def getTestCameras(self, scale=1.0):
-        return self.test_cameras[scale]
+        return CameraDataset(self.test_cameras[scale])
