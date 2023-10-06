@@ -111,13 +111,15 @@ class FlameGaussianModel(GaussianModel):
         self.face_center = triangles.mean(dim=-2).squeeze(0)
 
         # rotate
-        self.face_orien_mat = compute_face_orientation(verts, self.flame_model.faces).squeeze(0)
+        self.face_orien_mat = compute_face_orientation(verts, faces).squeeze(0)
         self.face_orien_quat = matrix_to_quaternion(self.face_orien_mat)
     
     @property
     def get_rotation(self):
-        rot = quaternion_multiply(self._rotation, self.face_orien_quat[self.binding])
-        return self.rotation_activation(rot)
+        # always need to normalize the rotation quaternions before chaining them
+        rot = self.rotation_activation(self._rotation)
+        face_orien_quat = self.rotation_activation(self.face_orien_quat[self.binding])
+        return quaternion_multiply(rot, face_orien_quat)
     
     @property
     def get_xyz(self):

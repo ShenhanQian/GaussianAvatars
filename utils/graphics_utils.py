@@ -113,7 +113,7 @@ def compute_face_orientation(verts, faces):
 
     a0 = safe_normalize(v1 - v0)
     a1 = safe_normalize(torch.cross(a0, v2 - v0))
-    a2 = safe_normalize(torch.cross(a1, a0))
+    a2 = -safe_normalize(torch.cross(a1, a0))  # will have artifacts without negation
 
     orientation = torch.cat([a0[..., None], a1[..., None], a2[..., None]], dim=-1)
     return orientation
