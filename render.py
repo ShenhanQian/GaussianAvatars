@@ -29,7 +29,7 @@ def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipelin
     makedirs(gts_path, exist_ok=True)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        if dataset.bind_to_mesh:
+        if hasattr(gaussians, "select_mesh_by_timestep"):
             gaussians.select_mesh_by_timestep(view.timestep)
         rendering = render(view, gaussians, pipeline, background)["render"]
         gt = view.original_image[0:3, :, :]

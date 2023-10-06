@@ -63,7 +63,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 net_image = None
                 custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
                 if custom_cam != None:
-                    if dataset.bind_to_mesh:
+                    if hasattr(gaussians, "select_mesh_by_timestep"):
                         gaussians.select_mesh_by_timestep(custom_cam.timestep)
                     net_image = render(custom_cam, gaussians, pipe, background, scaling_modifer)["render"]
                     net_dict = {'num_timesteps': gaussians.num_timesteps}
@@ -92,7 +92,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #     viewpoint_stack = scene.getTrainCameras().copy()
         # viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
 
-        if dataset.bind_to_mesh:
+        if hasattr(gaussians, "select_mesh_by_timestep"):
             gaussians.select_mesh_by_timestep(viewpoint_cam.timestep)
 
         # Render
@@ -103,23 +103,28 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
-        Ll1 = l1_loss(image, gt_image)
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
-        loss.backward()
+
+        losses = {}
+        losses['l1'] = l1_loss(image, gt_image) * (1.0 - opt.lambda_dssim)
+        losses['ssim'] = (1.0 - ssim(image, gt_image)) * opt.lambda_dssim
+        losses['xyz'] = gaussians._xyz.norm(dim=1).mean() * opt.lambda_xyz
+        
+        losses['total'] = sum([v for k, v in losses.items()])
+        losses['total'].backward()
 
         iter_end.record()
 
         with torch.no_grad():
             # Progress bar
-            ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
+            ema_loss_for_log = 0.4 * losses['total'].item() + 0.6 * ema_loss_for_log
             if iteration % 10 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
+                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}", "xyz": f"{losses['xyz']:.{7}f}"})
                 progress_bar.update(10)
             if iteration == opt.iterations:
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
+            training_report(tb_writer, iteration, losses, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
@@ -168,10 +173,12 @@ def prepare_output_and_logger(args):
         print("Tensorboard not available: not logging progress")
     return tb_writer
 
-def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs):
+def training_report(tb_writer, iteration, losses, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs):
     if tb_writer:
-        tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
-        tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
+        tb_writer.add_scalar('train_loss_patches/l1_loss', losses['l1'].item(), iteration)
+        tb_writer.add_scalar('train_loss_patches/ssim_loss', losses['ssim'].item(), iteration)
+        tb_writer.add_scalar('train_loss_patches/xyz_loss', losses['xyz'].item(), iteration)
+        tb_writer.add_scalar('train_loss_patches/total_loss', losses['total'].item(), iteration)
         tb_writer.add_scalar('iter_time', elapsed, iteration)
 
     # Report test and samples of training set
@@ -179,7 +186,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         print("\n[ITER {}] Evaluating".format(iteration))
         torch.cuda.empty_cache()
         validation_configs = (
-            {'name': 'test', 'cameras' : scene.getTestCameras()}, 
+            {'name': 'test', 'cameras' : scene.getTestCameras()},
             # {'name': 'train', 'cameras' : [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in range(5, 30, 5)]},
             {'name': 'train', 'cameras' : scene.getTrainCameras()},
         )
@@ -190,10 +197,12 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 psnr_test = 0.0
                 ssim_test = 0.0
                 # lpips_test = 0.0
-                for idx, viewpoint in tqdm(enumerate(DataLoader(config['cameras'], batch_size=None, num_workers=8)), total=len(config['cameras'])):
+                for idx, viewpoint in tqdm(enumerate(DataLoader(config['cameras'], shuffle=False, batch_size=None, num_workers=8)), total=len(config['cameras'])):
+                    if hasattr(scene.gaussians, "select_mesh_by_timestep"):
+                        scene.gaussians.select_mesh_by_timestep(viewpoint.timestep)
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
-                    if tb_writer and (idx < 5):
+                    if tb_writer and (idx % (len(config['cameras']) // 5) == 0):
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
                         if iteration == testing_iterations[0]:
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
@@ -207,7 +216,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 # lpips_test /= len(config['cameras'])          
                 ssim_test /= len(config['cameras'])          
                 # print("\n[ITER {}] Evaluating {}: L1 {:.4f} PSNR {:.4f} SSIM {:.4f} LPIPS {:.4f}".format(iteration, config['name'], l1_test, psnr_test, ssim_test, lpips_test))
-                print("\n[ITER {}] Evaluation ({}): L1 {:.4f} PSNR {:.4f} SSIM {:.4f}".format(iteration, config['name'], l1_test, psnr_test, ssim_test))
+                print("\n[ITER {}] Evaluation ({}): L1 {:.4f} PSNR {:.4f} SSIM {:.4f}\n".format(iteration, config['name'], l1_test, psnr_test, ssim_test))
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
