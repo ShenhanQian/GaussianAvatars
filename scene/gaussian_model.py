@@ -59,10 +59,11 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self.setup_functions()
 
-        self.face_center = None  # will be set in select_mesh_by_timestep
+        # for binding GaussianModel to a mesh
+        self.face_center = None
         self.face_orien_mat = None
         self.face_orien_quat = None
-        self.binding = None  # will be set in load_meshes
+        self.binding = None
 
     def capture(self):
         return (
