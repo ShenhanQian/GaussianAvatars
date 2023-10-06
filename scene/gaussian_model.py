@@ -16,6 +16,7 @@ from torch import nn
 import os
 from utils.system_utils import mkdir_p
 from plyfile import PlyData, PlyElement
+from pytorch3d.transforms import quaternion_multiply
 from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
@@ -58,6 +59,11 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self.setup_functions()
 
+        self.face_center = None  # will be set in select_mesh_by_timestep
+        self.face_orien_mat = None
+        self.face_orien_quat = None
+        self.binding = None  # will be set in load_meshes
+
     def capture(self):
         return (
             self.active_sh_degree,
@@ -67,6 +73,7 @@ class GaussianModel:
             self._scaling,
             self._rotation,
             self._opacity,
+            self.binding,
             self.max_radii2D,
             self.xyz_gradient_accum,
             self.denom,
@@ -82,6 +89,7 @@ class GaussianModel:
         self._scaling, 
         self._rotation, 
         self._opacity,
+        self.binding,
         self.max_radii2D, 
         xyz_gradient_accum, 
         denom,
@@ -98,11 +106,21 @@ class GaussianModel:
     
     @property
     def get_rotation(self):
-        return self.rotation_activation(self._rotation)
+        if self.face_orien_quat is None:
+            return self.rotation_activation(self._rotation)
+        else:
+            # always need to normalize the rotation quaternions before chaining them
+            rot = self.rotation_activation(self._rotation)
+            face_orien_quat = self.rotation_activation(self.face_orien_quat[self.binding])
+            return quaternion_multiply(rot, face_orien_quat)
     
     @property
     def get_xyz(self):
-        return self._xyz
+        if self.face_center is None:
+            return self._xyz
+        else:
+            xyz = torch.bmm(self.face_orien_mat[self.binding], self._xyz[..., None]).squeeze(-1)
+            return xyz + self.face_center[self.binding]
     
     @property
     def get_features(self):
@@ -186,6 +204,8 @@ class GaussianModel:
             l.append('scale_{}'.format(i))
         for i in range(self._rotation.shape[1]):
             l.append('rot_{}'.format(i))
+        for i in range(1):
+            l.append('binding_{}'.format(i))
         return l
 
     def save_ply(self, path):
@@ -198,11 +218,12 @@ class GaussianModel:
         opacities = self._opacity.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
+        binding = self.binding.detach().cpu().numpy()
 
         dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
 
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        attributes = np.concatenate((xyz, normals, f_dc, f_rest, opacities, scale, rotation), axis=1)
+        attributes = np.concatenate((xyz, normals, f_dc, f_rest, opacities, scale, rotation, binding[:, None]), axis=1)
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, 'vertex')
         PlyData([el]).write(path)
@@ -245,6 +266,12 @@ class GaussianModel:
         rots = np.zeros((xyz.shape[0], len(rot_names)))
         for idx, attr_name in enumerate(rot_names):
             rots[:, idx] = np.asarray(plydata.elements[0][attr_name])
+        
+        binding_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("binding")]
+        binding_names = sorted(binding_names, key = lambda x: int(x.split('_')[-1]))
+        binding = np.zeros((xyz.shape[0], len(binding_names)), dtype=np.int32)
+        for idx, attr_name in enumerate(binding_names):
+            binding[:, idx] = np.asarray(plydata.elements[0][attr_name])
 
         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda").requires_grad_(True))
         self._features_dc = nn.Parameter(torch.tensor(features_dc, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
@@ -252,6 +279,7 @@ class GaussianModel:
         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(True))
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
+        self.binding = torch.tensor(binding, dtype=torch.int32, device="cuda").squeeze(-1)
 
         self.active_sh_degree = self.max_sh_degree
 
