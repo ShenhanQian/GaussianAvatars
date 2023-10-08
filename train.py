@@ -63,7 +63,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 net_image = None
                 custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
                 if custom_cam != None:
-                    if hasattr(gaussians, "select_mesh_by_timestep"):
+                    if gaussians.binding != None:
                         gaussians.select_mesh_by_timestep(custom_cam.timestep)
                     net_image = render(custom_cam, gaussians, pipe, background, scaling_modifer)["render"]
                     net_dict = {'num_timesteps': gaussians.num_timesteps}
@@ -92,7 +92,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #     viewpoint_stack = scene.getTrainCameras().copy()
         # viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
 
-        if hasattr(gaussians, "select_mesh_by_timestep"):
+        if gaussians.binding != None:
             gaussians.select_mesh_by_timestep(viewpoint_cam.timestep)
 
         # Render
@@ -238,7 +238,7 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--interval", type=int, default=10_000)
+    parser.add_argument("--interval", type=int, default=50_000)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--quiet", action="store_true")

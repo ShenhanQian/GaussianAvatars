@@ -1,5 +1,6 @@
+from pathlib import Path
+import numpy as np
 import torch
-import torch.nn as nn
 from vht.model.flame import FlameHead
 
 from .gaussian_model import GaussianModel
@@ -12,42 +13,45 @@ class FlameGaussianModel(GaussianModel):
         super().__init__(sh_degree)
 
         self.flame_model = FlameHead(n_shape, n_expr).cuda()
+        self.flame_param = None
+
+        # binding is initialized once the mesh topology is known
+        if self.binding is None:
+            self.binding = torch.arange(len(self.flame_model.faces)).cuda()
     
     def load_meshes(self, train_meshes, test_meshes, tgt_train_meshes, tgt_test_meshes):
-        meshes = {**train_meshes, **test_meshes}
-        tgt_meshes = {**tgt_train_meshes, **tgt_test_meshes}
-        pose_meshes = meshes if len(tgt_meshes) == 0 else tgt_meshes
-        
-        num_timesteps = max(pose_meshes) + 1
-        num_verts = meshes[0]['static_offset'].shape[1]
-        self.flame_param = {
-            'shape': torch.from_numpy(meshes[0]['shape']),
-            'expr': torch.zeros([num_timesteps, meshes[0]['expr'].shape[1]]),
-            'rotation': torch.zeros([num_timesteps, 3]),
-            'neck_pose': torch.zeros([num_timesteps, 3]),
-            'jaw_pose': torch.zeros([num_timesteps, 3]),
-            'eyes_pose': torch.zeros([num_timesteps, 6]),
-            'translation': torch.zeros([num_timesteps, 3]),
-            'static_offset': torch.from_numpy(meshes[0]['static_offset']),
-            'dynamic_offset': torch.zeros([num_timesteps, num_verts, 3]),
-        }
-        self.num_timesteps = num_timesteps
+        if self.flame_param is None:
+            meshes = {**train_meshes, **test_meshes}
+            tgt_meshes = {**tgt_train_meshes, **tgt_test_meshes}
+            pose_meshes = meshes if len(tgt_meshes) == 0 else tgt_meshes
+            
+            self.num_timesteps = max(pose_meshes) + 1  # required by viewers
+            num_verts = meshes[0]['static_offset'].shape[1]
+            T = self.num_timesteps
 
-        for i, mesh in pose_meshes.items():
-            self.flame_param['expr'][i] = torch.from_numpy(mesh['expr'])
-            self.flame_param['rotation'][i] = torch.from_numpy(mesh['rotation'])
-            self.flame_param['neck_pose'][i] = torch.from_numpy(mesh['neck_pose'])
-            self.flame_param['jaw_pose'][i] = torch.from_numpy(mesh['jaw_pose'])
-            self.flame_param['eyes_pose'][i] = torch.from_numpy(mesh['eyes_pose'])
-            self.flame_param['translation'][i] = torch.from_numpy(mesh['translation'])
-            self.flame_param['dynamic_offset'][i] = torch.from_numpy(mesh['dynamic_offset'])
-        
-        for k, v in self.flame_param.items():
-            self.flame_param[k] = v.float().cuda()
-        
-        if self.binding is None:
-            assert len(self._xyz) == len(self.flame_model.faces)
-            self.binding = torch.arange(self._xyz.shape[0]).cuda()
+            self.flame_param = {
+                'shape': torch.from_numpy(meshes[0]['shape']),
+                'expr': torch.zeros([T, meshes[0]['expr'].shape[1]]),
+                'rotation': torch.zeros([T, 3]),
+                'neck_pose': torch.zeros([T, 3]),
+                'jaw_pose': torch.zeros([T, 3]),
+                'eyes_pose': torch.zeros([T, 6]),
+                'translation': torch.zeros([T, 3]),
+                'static_offset': torch.from_numpy(meshes[0]['static_offset']),
+                'dynamic_offset': torch.zeros([T, num_verts, 3]),
+            }
+
+            for i, mesh in pose_meshes.items():
+                self.flame_param['expr'][i] = torch.from_numpy(mesh['expr'])
+                self.flame_param['rotation'][i] = torch.from_numpy(mesh['rotation'])
+                self.flame_param['neck_pose'][i] = torch.from_numpy(mesh['neck_pose'])
+                self.flame_param['jaw_pose'][i] = torch.from_numpy(mesh['jaw_pose'])
+                self.flame_param['eyes_pose'][i] = torch.from_numpy(mesh['eyes_pose'])
+                self.flame_param['translation'][i] = torch.from_numpy(mesh['translation'])
+                self.flame_param['dynamic_offset'][i] = torch.from_numpy(mesh['dynamic_offset'])
+            
+            for k, v in self.flame_param.items():
+                self.flame_param[k] = v.float().cuda()
     
     def select_mesh_by_timestep(self, timestep):
         verts = self.flame_model(
@@ -94,3 +98,10 @@ class FlameGaussianModel(GaussianModel):
     #                                                 lr_final=training_args.position_lr_final*self.spatial_lr_scale,
     #                                                 lr_delay_mult=training_args.position_lr_delay_mult,
     #                                                 max_steps=training_args.position_lr_max_steps)
+
+    def save_ply(self, path):
+        super().save_ply(path)
+
+        npz_path = Path(path).parent / "flame_param.npz"
+        flame_param = {k: v.cpu().numpy() for k, v in self.flame_param.items()}
+        np.save(str(npz_path), flame_param)

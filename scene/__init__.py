@@ -84,9 +84,7 @@ class Scene:
                 self.loaded_iter = load_iteration
             print("Loading trained model at iteration {}".format(self.loaded_iter))
 
-        self.train_cameras = {}
-        self.test_cameras = {}
-
+        # load dataset
         if os.path.exists(os.path.join(args.source_path, "sparse")):
             scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval)
         elif os.path.exists(os.path.join(args.source_path, "canonical_flame_param.npz")):
@@ -98,9 +96,14 @@ class Scene:
         else:
             assert False, "Could not recognize scene type!"
 
+        # process cameras
+        self.train_cameras = {}
+        self.test_cameras = {}
+        
         if not self.loaded_iter:
-            with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
-                dest_file.write(src_file.read())
+            if gaussians.binding == None:
+                with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
+                    dest_file.write(src_file.read())
             json_cams = []
             camlist = []
             if scene_info.test_cameras:
@@ -123,7 +126,13 @@ class Scene:
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
             print("Loading Test Cameras")
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
-
+        
+        # process meshes
+        if gaussians.binding != None:
+            self.gaussians.load_meshes(scene_info.train_meshes, scene_info.test_meshes, 
+                                       scene_info.tgt_train_meshes, scene_info.tgt_test_meshes)
+        
+        # create gaussians
         if self.loaded_iter:
             self.gaussians.load_ply(os.path.join(self.model_path,
                                                            "point_cloud",
@@ -131,11 +140,6 @@ class Scene:
                                                            "point_cloud.ply"))
         else:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
-        
-        if args.bind_to_mesh:
-            self.gaussians.load_meshes(scene_info.train_meshes, scene_info.test_meshes, 
-                                       scene_info.tgt_train_meshes, scene_info.tgt_test_meshes)
-
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))

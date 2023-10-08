@@ -39,11 +39,11 @@ class CameraInfo(NamedTuple):
     timestep: Optional[int]
 
 class SceneInfo(NamedTuple):
-    point_cloud: BasicPointCloud
     train_cameras: list
     test_cameras: list
     nerf_normalization: dict
-    ply_path: str
+    point_cloud: Optional[BasicPointCloud]
+    ply_path: Optional[str]
     train_meshes: Optional[dict]
     test_meshes: Optional[dict]
     tgt_train_meshes: Optional[dict]
@@ -286,7 +286,7 @@ def readMeshesFromTransforms(path, transformsfile):
             mesh_infos[frame["timestep_index"]] = flame_param
     return mesh_infos
 
-def readDynamicNerfInfo(path, white_background, eval, extension=".png", scene_scale=0.1, num_pts=9976, target_path=""):
+def readDynamicNerfInfo(path, white_background, eval, extension=".png", target_path=""):
     print("Reading Training Transforms")
     if target_path != "":
         train_cam_infos = readCamerasFromTransforms(target_path, "transforms_train.json", white_background, extension)
@@ -325,32 +325,11 @@ def readDynamicNerfInfo(path, white_background, eval, extension=".png", scene_sc
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
-    ply_path = os.path.join(path, "points3d.ply")
-    # Since this data set has no colmap data, we start with random points
-    print(f"Generating random point cloud ({num_pts})...")
-
-    if num_pts is None:
-        # If not bound to mesh, we create random points inside a cube
-        num_pts = 100_000
-        xyz = np.random.random((num_pts, 3)) * 2 * scene_scale - scene_scale
-    else:
-        # otherwise, xyz are used as the offset from the mesh
-        xyz = np.zeros((num_pts, 3))
-    shs = np.random.random((num_pts, 3)) / 255.0
-    pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
-
-    storePly(ply_path, xyz, SH2RGB(shs) * 255)
-
-    try:
-        pcd = fetchPly(ply_path)
-    except:
-        pcd = None
-
-    scene_info = SceneInfo(point_cloud=pcd,
+    scene_info = SceneInfo(point_cloud=None,
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
                            nerf_normalization=nerf_normalization,
-                           ply_path=ply_path,
+                           ply_path=None,
                            train_meshes=train_mesh_infos,
                            test_meshes=test_mesh_infos,
                            tgt_train_meshes=tgt_train_mesh_infos,
