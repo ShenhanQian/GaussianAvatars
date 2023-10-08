@@ -18,7 +18,8 @@ class FlameGaussianModel(GaussianModel):
         # binding is initialized once the mesh topology is known
         if self.binding is None:
             self.binding = torch.arange(len(self.flame_model.faces)).cuda()
-    
+            self.binding_counter = torch.ones(len(self.flame_model.faces), dtype=torch.int32).cuda()
+
     def load_meshes(self, train_meshes, test_meshes, tgt_train_meshes, tgt_test_meshes):
         if self.flame_param is None:
             meshes = {**train_meshes, **test_meshes}

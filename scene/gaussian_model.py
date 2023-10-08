@@ -64,7 +64,8 @@ class GaussianModel:
         self.face_center = None
         self.face_orien_mat = None
         self.face_orien_quat = None
-        self.binding = None
+        self.binding = None  # gaussian index to face index
+        self.binding_counter = None  # number of points bound to each face
         self.num_timesteps = None  # required by viewers
 
     def capture(self):
@@ -77,6 +78,7 @@ class GaussianModel:
             self._rotation,
             self._opacity,
             self.binding,
+            self.binding_counter,
             self.max_radii2D,
             self.xyz_gradient_accum,
             self.denom,
@@ -93,6 +95,7 @@ class GaussianModel:
         self._rotation, 
         self._opacity,
         self.binding,
+        self.binding_counter,
         self.max_radii2D, 
         xyz_gradient_accum, 
         denom,
@@ -341,6 +344,14 @@ class GaussianModel:
         return optimizable_tensors
 
     def prune_points(self, mask):
+        if self.binding != None:
+            # make sure each face is bound to at least one point after pruning
+            binding_to_prune = self.binding[mask]
+            counter_prune = torch.zeros_like(self.binding_counter)
+            counter_prune.scatter_add_(0, binding_to_prune, torch.ones_like(binding_to_prune, dtype=torch.int32, device="cuda"))
+            mask_redundant = (self.binding_counter - counter_prune) > 0
+            mask[mask.clone()] = mask_redundant[binding_to_prune]
+
         valid_points_mask = ~mask
         optimizable_tensors = self._prune_optimizer(valid_points_mask)
 
@@ -356,7 +367,8 @@ class GaussianModel:
         self.denom = self.denom[valid_points_mask]
         self.max_radii2D = self.max_radii2D[valid_points_mask]
 
-        if hasattr(self, "binding"):
+        if self.binding != None:
+            self.binding_counter.scatter_add_(0, self.binding[mask], -torch.ones_like(self.binding[mask], dtype=torch.int32, device="cuda"))
             self.binding = self.binding[valid_points_mask]
 
     def cat_tensors_to_optimizer(self, tensors_dict):
@@ -425,6 +437,7 @@ class GaussianModel:
         if hasattr(self, "binding"):
             new_binding = self.binding[selected_pts_mask].repeat(N)
             self.binding = torch.cat((self.binding, new_binding))
+            self.binding_counter.scatter_add_(0, new_binding, torch.ones_like(new_binding, dtype=torch.int32, device="cuda"))
 
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacity, new_scaling, new_rotation)
 
@@ -446,6 +459,8 @@ class GaussianModel:
         if hasattr(self, "binding"):
             new_binding = self.binding[selected_pts_mask]
             self.binding = torch.cat((self.binding, new_binding))
+            self.binding_counter[new_binding] += 1
+            self.binding_counter.scatter_add_(0, new_binding, torch.ones_like(new_binding, dtype=torch.int32, device="cuda"))
         
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
 
