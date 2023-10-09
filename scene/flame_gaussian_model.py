@@ -49,7 +49,7 @@ class FlameGaussianModel(GaussianModel):
                 self.flame_param['jaw_pose'][i] = torch.from_numpy(mesh['jaw_pose'])
                 self.flame_param['eyes_pose'][i] = torch.from_numpy(mesh['eyes_pose'])
                 self.flame_param['translation'][i] = torch.from_numpy(mesh['translation'])
-                self.flame_param['dynamic_offset'][i] = torch.from_numpy(mesh['dynamic_offset'])
+                # self.flame_param['dynamic_offset'][i] = torch.from_numpy(mesh['dynamic_offset'])
             
             for k, v in self.flame_param.items():
                 self.flame_param[k] = v.float().cuda()
@@ -80,29 +80,34 @@ class FlameGaussianModel(GaussianModel):
         self.face_orien_mat = compute_face_orientation(verts, faces).squeeze(0)
         self.face_orien_quat = matrix_to_quaternion(self.face_orien_mat)
     
-    # def training_setup(self, training_args):
-    #     self.percent_dense = training_args.percent_dense
-    #     self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-    #     self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+    def training_setup(self, training_args):
+        # self.percent_dense = training_args.percent_dense
+        # self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        # self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
-    #     l = [
-    #         {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
-    #         {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
-    #         {'params': [self._features_rest], 'lr': training_args.feature_lr / 20.0, "name": "f_rest"},
-    #         {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
-    #         {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
-    #         {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
-    #     ]
+        # l = [
+        #     {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
+        #     {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
+        #     {'params': [self._features_rest], 'lr': training_args.feature_lr / 20.0, "name": "f_rest"},
+        #     {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
+        #     {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
+        #     {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
+        # ]
 
-    #     self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
-    #     self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
-    #                                                 lr_final=training_args.position_lr_final*self.spatial_lr_scale,
-    #                                                 lr_delay_mult=training_args.position_lr_delay_mult,
-    #                                                 max_steps=training_args.position_lr_max_steps)
+        # self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
+        # self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
+        #                                             lr_final=training_args.position_lr_final*self.spatial_lr_scale,
+        #                                             lr_delay_mult=training_args.position_lr_delay_mult,
+        #                                             max_steps=training_args.position_lr_max_steps)
+        super().training_setup(training_args)
+
+        self.flame_param['dynamic_offset'].requires_grad = True
+        extra_param_group = {'params': [self.flame_param['dynamic_offset']], 'lr': 1.6e-6, "name": "dynamic_offset"}
+        self.optimizer.add_param_group(extra_param_group)
 
     def save_ply(self, path):
         super().save_ply(path)
 
         npz_path = Path(path).parent / "flame_param.npz"
         flame_param = {k: v.cpu().numpy() for k, v in self.flame_param.items()}
-        np.save(str(npz_path), flame_param)
+        np.savez(str(npz_path), **flame_param)
