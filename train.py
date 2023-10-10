@@ -61,10 +61,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         while network_gui.conn != None:
             try:
                 net_image = None
-                custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
+                custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer, use_original_mesh = network_gui.receive()
                 if custom_cam != None:
                     if gaussians.binding != None:
-                        gaussians.select_mesh_by_timestep(custom_cam.timestep)
+                        gaussians.select_mesh_by_timestep(custom_cam.timestep, use_original_mesh)
                     net_image = render(custom_cam, gaussians, pipe, background, scaling_modifer)["render"]
                     net_dict = {'num_timesteps': gaussians.num_timesteps}
                     network_gui.send(net_image, net_dict)

@@ -14,6 +14,7 @@ class FlameGaussianModel(GaussianModel):
 
         self.flame_model = FlameHead(n_shape, n_expr).cuda()
         self.flame_param = None
+        self.flame_param_orig = None
 
         # binding is initialized once the mesh topology is known
         if self.binding is None:
@@ -53,21 +54,29 @@ class FlameGaussianModel(GaussianModel):
             
             for k, v in self.flame_param.items():
                 self.flame_param[k] = v.float().cuda()
+            
+            self.flame_param_orig = {k: v.clone() for k, v in self.flame_param.items()}
+        else:
+            # NOTE: not sure when this happens
+            import ipdb; ipdb.set_trace()
+            pass
     
-    def select_mesh_by_timestep(self, timestep):
+    def select_mesh_by_timestep(self, timestep, original=False):
+        flame_param = self.flame_param_orig if original and self.flame_param_orig != None else self.flame_param
+
         verts = self.flame_model(
-            self.flame_param['shape'][None, ...],
-            self.flame_param['expr'][[timestep]],
-            self.flame_param['rotation'][[timestep]],
-            self.flame_param['neck_pose'][[timestep]],
-            self.flame_param['jaw_pose'][[timestep]],
-            self.flame_param['eyes_pose'][[timestep]],
-            self.flame_param['translation'][[timestep]],
+            flame_param['shape'][None, ...],
+            flame_param['expr'][[timestep]],
+            flame_param['rotation'][[timestep]],
+            flame_param['neck_pose'][[timestep]],
+            flame_param['jaw_pose'][[timestep]],
+            flame_param['eyes_pose'][[timestep]],
+            flame_param['translation'][[timestep]],
             zero_centered_at_root_node=False,
             use_rotation_limits=False,
             return_landmarks=False,
-            static_offset=self.flame_param['static_offset'],
-            dynamic_offset=self.flame_param['dynamic_offset'][[timestep]],
+            static_offset=flame_param['static_offset'],
+            dynamic_offset=flame_param['dynamic_offset'][[timestep]],
         )
 
         faces = self.flame_model.faces
@@ -81,29 +90,38 @@ class FlameGaussianModel(GaussianModel):
         self.face_orien_quat = matrix_to_quaternion(self.face_orien_mat)
     
     def training_setup(self, training_args):
-        # self.percent_dense = training_args.percent_dense
-        # self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-        # self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-
-        # l = [
-        #     {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
-        #     {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
-        #     {'params': [self._features_rest], 'lr': training_args.feature_lr / 20.0, "name": "f_rest"},
-        #     {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
-        #     {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
-        #     {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
-        # ]
-
-        # self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
-        # self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
-        #                                             lr_final=training_args.position_lr_final*self.spatial_lr_scale,
-        #                                             lr_delay_mult=training_args.position_lr_delay_mult,
-        #                                             max_steps=training_args.position_lr_max_steps)
         super().training_setup(training_args)
 
-        self.flame_param['dynamic_offset'].requires_grad = True
-        extra_param_group = {'params': [self.flame_param['dynamic_offset']], 'lr': 1.6e-6, "name": "dynamic_offset"}
-        self.optimizer.add_param_group(extra_param_group)
+        # shape
+        self.flame_param['shape'].requires_grad = True
+        param_shape = {'params': [self.flame_param['shape']], 'lr': 1e-6, "name": "shape"}
+        self.optimizer.add_param_group(param_shape)
+
+        # pose
+        self.flame_param['translation'].requires_grad = True
+        self.flame_param['rotation'].requires_grad = True
+        self.flame_param['neck_pose'].requires_grad = True
+        self.flame_param['jaw_pose'].requires_grad = True
+        self.flame_param['eyes_pose'].requires_grad = True
+        param_pose = {
+            'params': [
+                self.flame_param['translation'],
+                self.flame_param['rotation'],
+                self.flame_param['neck_pose'],
+                self.flame_param['jaw_pose'],
+                self.flame_param['eyes_pose'],
+            ], 
+        'lr': 1e-6, "name": "pose"}
+        self.optimizer.add_param_group(param_pose)
+        
+        # expression
+        self.flame_param['expr'].requires_grad = True
+        param_expr = {'params': [self.flame_param['expr']], 'lr': 1e-3, "name": "expr"}
+        self.optimizer.add_param_group(param_expr)
+
+        # self.flame_param['dynamic_offset'].requires_grad = True
+        # param_dynamic_offset = {'params': [self.flame_param['dynamic_offset']], 'lr': 1.6e-6, "name": "dynamic_offset"}
+        # self.optimizer.add_param_group(param_dynamic_offset)
 
     def save_ply(self, path):
         super().save_ply(path)
