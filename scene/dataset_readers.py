@@ -315,13 +315,11 @@ def readDynamicNerfInfo(path, white_background, eval, extension=".png", target_p
     else:
         tgt_test_mesh_infos = {}
     
-    if not eval:
+    if target_path != "" or not eval:
         train_cam_infos.extend(test_cam_infos)
         test_cam_infos = []
         train_mesh_infos.update(test_mesh_infos)
         test_mesh_infos = {}
-        tgt_train_mesh_infos.update(tgt_test_mesh_infos)
-        tgt_test_mesh_infos = {}
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 

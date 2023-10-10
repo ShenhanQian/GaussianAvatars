@@ -111,3 +111,13 @@ class FlameGaussianModel(GaussianModel):
         npz_path = Path(path).parent / "flame_param.npz"
         flame_param = {k: v.cpu().numpy() for k, v in self.flame_param.items()}
         np.savez(str(npz_path), **flame_param)
+
+    def load_ply(self, path):
+        super().load_ply(path)
+
+        npz_path = Path(path).parent / "flame_param.npz"
+        flame_param = np.load(str(npz_path))
+        flame_param = {k: torch.from_numpy(v).cuda() for k, v in flame_param.items()}
+
+        self.flame_param = flame_param
+        self.num_timesteps = self.flame_param['expr'].shape[0]  # required by viewers

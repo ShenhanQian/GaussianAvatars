@@ -107,7 +107,18 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         losses = {}
         losses['l1'] = l1_loss(image, gt_image) * (1.0 - opt.lambda_dssim)
         losses['ssim'] = (1.0 - ssim(image, gt_image)) * opt.lambda_dssim
-        losses['xyz'] = gaussians._xyz.norm(dim=1).mean() * opt.lambda_xyz
+
+        if gaussians.binding != None:
+            losses['xyz'] = gaussians._xyz.norm(dim=1).mean() * opt.lambda_xyz
+
+            if opt.lambda_dynamic_offset_std != 0:
+                ti = viewpoint_cam.timestep
+                t_indices =[ti]
+                if ti > 0:
+                    t_indices.append(ti-1)
+                if ti < gaussians.num_timesteps - 1:
+                    t_indices.append(ti+1)
+                losses['dynamic_offset_std'] = gaussians.flame_param['dynamic_offset'].std(dim=0).mean() * opt.lambda_dynamic_offset_std
         
         losses['total'] = sum([v for k, v in losses.items()])
         losses['total'].backward()
@@ -118,7 +129,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # Progress bar
             ema_loss_for_log = 0.4 * losses['total'].item() + 0.6 * ema_loss_for_log
             if iteration % 10 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}", "xyz": f"{losses['xyz']:.{7}f}"})
+                postfix = {"Loss": f"{ema_loss_for_log:.{7}f}"}
+                if 'xyz' in losses:
+                    postfix["xyz"] = f"{losses['xyz']:.{7}f}"
+                if 'dynamic_offset_std' in losses:
+                    postfix["dynamic_offset_std"] = f"{losses['dynamic_offset_std']:.{7}f}"
+                progress_bar.set_postfix(postfix)
                 progress_bar.update(10)
             if iteration == opt.iterations:
                 progress_bar.close()
@@ -177,7 +193,10 @@ def training_report(tb_writer, iteration, losses, elapsed, testing_iterations, s
     if tb_writer:
         tb_writer.add_scalar('train_loss_patches/l1_loss', losses['l1'].item(), iteration)
         tb_writer.add_scalar('train_loss_patches/ssim_loss', losses['ssim'].item(), iteration)
-        tb_writer.add_scalar('train_loss_patches/xyz_loss', losses['xyz'].item(), iteration)
+        if 'xyz' in losses:
+            tb_writer.add_scalar('train_loss_patches/xyz_loss', losses['xyz'].item(), iteration)
+        if 'dynamic_offset_std' in losses:
+            tb_writer.add_scalar('train_loss_patches/dynamic_offset_std', losses['dynamic_offset_std'].item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', losses['total'].item(), iteration)
         tb_writer.add_scalar('iter_time', elapsed, iteration)
 

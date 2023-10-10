@@ -56,6 +56,8 @@ class ModelParams(ParamGroup):
         self.data_device = "cuda"
         self.eval = False
         self.bind_to_mesh = False
+        self.load_cam_begin = 0
+        self.load_cam_step = 1
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -84,6 +86,7 @@ class OptimizationParams(ParamGroup):
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
         self.lambda_xyz = 1.
+        self.lambda_dynamic_offset_std = 1.
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500
