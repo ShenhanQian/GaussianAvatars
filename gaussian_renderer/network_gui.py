@@ -62,35 +62,27 @@ def send(net_image, send_dict):
     conn.sendall(dict_str.encode("utf-8"))
 
 def receive():
-    message = read()
+    msg = read()
 
-    width = message["resolution_x"]
-    height = message["resolution_y"]
-    do_training = bool(message["train"])
-    keep_alive = bool(message["keep_alive"])
+    width = msg["resolution_x"]
+    height = msg["resolution_y"]
+    msg["do_training"] = bool(msg["do_training"])
+    msg["keep_alive"] = bool(msg["keep_alive"])
 
     if width != 0 and height != 0:
         try:
-            fovy = message["fov_y"]
-            fovx = message["fov_x"]
-            znear = message["z_near"]
-            zfar = message["z_far"]
-            do_shs_python = bool(message["shs_python"])
-            do_rot_scale_python = bool(message["rot_scale_python"])
-            scaling_modifier = message["scaling_modifier"]
-            use_original_mesh = message["use_original_mesh"]
-            world_view_transform = torch.reshape(torch.tensor(message["view_matrix"]), (4, 4)).cuda()
+            world_view_transform = torch.reshape(torch.tensor(msg["view_matrix"]), (4, 4)).cuda()
             world_view_transform[:,1] = -world_view_transform[:,1]
             world_view_transform[:,2] = -world_view_transform[:,2]
-            full_proj_transform = torch.reshape(torch.tensor(message["view_projection_matrix"]), (4, 4)).cuda()
+            full_proj_transform = torch.reshape(torch.tensor(msg["view_projection_matrix"]), (4, 4)).cuda()
             full_proj_transform[:,1] = -full_proj_transform[:,1]
-            timestep = message["timestep"] if "timestep" in message else None
-            custom_cam = MiniCam(width, height, fovy, fovx, znear, zfar, world_view_transform, full_proj_transform, timestep)
+            timestep = msg["timestep"] if "timestep" in msg else None
+            custom_cam = MiniCam(width, height, msg["fov_y"], msg["fov_x"], msg["z_near"], msg["z_far"], world_view_transform, full_proj_transform, timestep)
         except Exception as e:
             print("")
             print(e)
             traceback.print_exc()
             raise e
-        return custom_cam, do_training, do_shs_python, do_rot_scale_python, keep_alive, scaling_modifier, use_original_mesh
+        return custom_cam, msg
     else:
-        return None, do_training, None, None, keep_alive, None
+        return None, msg

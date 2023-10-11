@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from random import randint
 from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
+from mesh_renderer import NVDiffRenderer
 import sys
 from scene import Scene, GaussianModel, FlameGaussianModel
 from utils.general_utils import safe_state
@@ -35,6 +36,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     tb_writer = prepare_output_and_logger(dataset)
     if dataset.bind_to_mesh:
         gaussians = FlameGaussianModel(dataset.sh_degree)
+        mesh_renderer = NVDiffRenderer()
     else:
         gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
@@ -60,17 +62,42 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             network_gui.try_connect()
         while network_gui.conn != None:
             try:
+                # receive data
                 net_image = None
-                custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer, use_original_mesh = network_gui.receive()
+                # custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer, use_original_mesh = network_gui.receive()
+                custom_cam, msg = network_gui.receive()
+
+                # render
                 if custom_cam != None:
+                    # mesh selection by timestep
                     if gaussians.binding != None:
-                        gaussians.select_mesh_by_timestep(custom_cam.timestep, use_original_mesh)
-                    net_image = render(custom_cam, gaussians, pipe, background, scaling_modifer)["render"]
+                        gaussians.select_mesh_by_timestep(custom_cam.timestep, msg['use_original_mesh'])
+                    
+                    # gaussian splatting rendering
+                    if msg['show_splatting']:
+                        net_image = render(custom_cam, gaussians, pipe, background, msg['scaling_modifier'])["render"]
+                    
+                    # mesh rendering
+                    if gaussians.binding != None and msg['show_mesh']:
+                        out_dict = mesh_renderer.render_from_camera(gaussians.verts, gaussians.faces, custom_cam)
+
+                        rgba_mesh = out_dict['rgba'].squeeze(0).permute(2, 0, 1)  # (C, W, H)
+                        rgb_mesh = rgba_mesh[:3, :, :]
+                        alpha_mesh = rgba_mesh[3:, :, :]
+
+                        mesh_opacity = msg['mesh_opacity']
+                        if net_image is None:
+                            net_image = rgb_mesh
+                        else:
+                            net_image = rgb_mesh * alpha_mesh * mesh_opacity  + net_image * (alpha_mesh * (1 - mesh_opacity) + (1 - alpha_mesh))
+
+                    # send data
                     net_dict = {'num_timesteps': gaussians.num_timesteps}
                     network_gui.send(net_image, net_dict)
-                if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
+                if msg['do_training'] and ((iteration < int(opt.iterations)) or not msg['keep_alive']):
                     break
             except Exception as e:
+                print(e)
                 network_gui.conn = None
 
         iter_start.record()

@@ -88,13 +88,17 @@ class FlameGaussianModel(GaussianModel):
         # rotate
         self.face_orien_mat = compute_face_orientation(verts, faces).squeeze(0)
         self.face_orien_quat = matrix_to_quaternion(self.face_orien_mat)
+
+        # for mesh rendering
+        self.verts = verts
+        self.faces = faces
     
     def training_setup(self, training_args):
         super().training_setup(training_args)
 
         # shape
         self.flame_param['shape'].requires_grad = True
-        param_shape = {'params': [self.flame_param['shape']], 'lr': 1e-6, "name": "shape"}
+        param_shape = {'params': [self.flame_param['shape']], 'lr': 1e-5, "name": "shape"}
         self.optimizer.add_param_group(param_shape)
 
         # pose
