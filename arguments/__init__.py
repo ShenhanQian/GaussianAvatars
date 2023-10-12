@@ -86,6 +86,8 @@ class OptimizationParams(ParamGroup):
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
         self.lambda_xyz = 1.
+        self.lambda_dynamic_offset = 0.
+        self.lambda_laplacian = 0.
         self.lambda_dynamic_offset_std = 0  #1.
         self.densification_interval = 100
         self.opacity_reset_interval = 3000

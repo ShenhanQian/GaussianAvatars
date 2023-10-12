@@ -282,7 +282,7 @@ def readMeshesFromTransforms(path, transformsfile):
             if not 'timestep_index' in frame or frame["timestep_index"] in mesh_infos:
                 continue
 
-            flame_param = dict(np.load(os.path.join(path, frame['flame_param_path'])))
+            flame_param = dict(np.load(os.path.join(path, frame['flame_param_path']), allow_pickle=True))
             mesh_infos[frame["timestep_index"]] = flame_param
     return mesh_infos
 

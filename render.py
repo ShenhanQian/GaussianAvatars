@@ -10,6 +10,7 @@
 #
 
 import torch
+from torch.utils.data import DataLoader
 from scene import Scene
 import os
 from tqdm import tqdm
@@ -28,7 +29,8 @@ def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipelin
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
 
-    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+    views_loader = DataLoader(views, batch_size=None, shuffle=False, num_workers=8)
+    for idx, view in enumerate(tqdm(views_loader, desc="Rendering progress")):
         if gaussians.binding != None:
             gaussians.select_mesh_by_timestep(view.timestep)
         rendering = render(view, gaussians, pipeline, background)["render"]

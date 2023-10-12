@@ -66,6 +66,7 @@ class GaussianModel:
         self.face_orien_quat = None
         self.binding = None  # gaussian index to face index
         self.binding_counter = None  # number of points bound to each face
+        self.timestep = None  # the current timestep
         self.num_timesteps = None  # required by viewers
 
     def capture(self):

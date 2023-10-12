@@ -97,7 +97,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 if msg['do_training'] and ((iteration < int(opt.iterations)) or not msg['keep_alive']):
                     break
             except Exception as e:
-                print(e)
+                # print(e)
                 network_gui.conn = None
 
         iter_start.record()
@@ -138,6 +138,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if gaussians.binding != None:
             losses['xyz'] = gaussians._xyz.norm(dim=1).mean() * opt.lambda_xyz
 
+            if opt.lambda_dynamic_offset != 0:
+                losses['dynamic_offset'] = gaussians.compute_dynamic_offset_loss() * opt.lambda_dynamic_offset
+
             if opt.lambda_dynamic_offset_std != 0:
                 ti = viewpoint_cam.timestep
                 t_indices =[ti]
@@ -146,6 +149,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 if ti < gaussians.num_timesteps - 1:
                     t_indices.append(ti+1)
                 losses['dynamic_offset_std'] = gaussians.flame_param['dynamic_offset'].std(dim=0).mean() * opt.lambda_dynamic_offset_std
+        
+            if opt.lambda_laplacian != 0:
+                losses['laplacian'] = gaussians.compute_laplacian_loss() * opt.lambda_laplacian
         
         losses['total'] = sum([v for k, v in losses.items()])
         losses['total'].backward()
@@ -159,6 +165,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 postfix = {"Loss": f"{ema_loss_for_log:.{7}f}"}
                 if 'xyz' in losses:
                     postfix["xyz"] = f"{losses['xyz']:.{7}f}"
+                if 'dynamic_offset' in losses:
+                    postfix["dynamic_offset"] = f"{losses['dynamic_offset']:.{7}f}"
+                if 'laplacian' in losses:
+                    postfix["laplacian"] = f"{losses['laplacian']:.{7}f}"
                 if 'dynamic_offset_std' in losses:
                     postfix["dynamic_offset_std"] = f"{losses['dynamic_offset_std']:.{7}f}"
                 progress_bar.set_postfix(postfix)
@@ -222,6 +232,10 @@ def training_report(tb_writer, iteration, losses, elapsed, testing_iterations, s
         tb_writer.add_scalar('train_loss_patches/ssim_loss', losses['ssim'].item(), iteration)
         if 'xyz' in losses:
             tb_writer.add_scalar('train_loss_patches/xyz_loss', losses['xyz'].item(), iteration)
+        if 'dynamic_offset' in losses:
+            tb_writer.add_scalar('train_loss_patches/dynamic_offset', losses['dynamic_offset'].item(), iteration)
+        if 'laplacian' in losses:
+            tb_writer.add_scalar('train_loss_patches/laplacian', losses['laplacian'].item(), iteration)
         if 'dynamic_offset_std' in losses:
             tb_writer.add_scalar('train_loss_patches/dynamic_offset_std', losses['dynamic_offset_std'].item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', losses['total'].item(), iteration)

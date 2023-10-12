@@ -62,9 +62,10 @@ class FlameGaussianModel(GaussianModel):
             pass
     
     def select_mesh_by_timestep(self, timestep, original=False):
+        self.timestep = timestep
         flame_param = self.flame_param_orig if original and self.flame_param_orig != None else self.flame_param
 
-        verts = self.flame_model(
+        verts, verts_cano = self.flame_model(
             flame_param['shape'][None, ...],
             flame_param['expr'][[timestep]],
             flame_param['rotation'][[timestep]],
@@ -75,6 +76,7 @@ class FlameGaussianModel(GaussianModel):
             zero_centered_at_root_node=False,
             use_rotation_limits=False,
             return_landmarks=False,
+            return_verts_cano=True,
             static_offset=flame_param['static_offset'],
             dynamic_offset=flame_param['dynamic_offset'][[timestep]],
         )
@@ -92,14 +94,33 @@ class FlameGaussianModel(GaussianModel):
         # for mesh rendering
         self.verts = verts
         self.faces = faces
+
+        # for mesh regularization
+        self.verts_cano = verts_cano
+    
+    def compute_dynamic_offset_loss(self):
+        loss_dynamic = (self.flame_param['dynamic_offset'][[self.timestep]] - self.flame_param_orig['dynamic_offset'][[self.timestep]]).norm(dim=-1)
+        return loss_dynamic.mean()
+    
+    def compute_laplacian_loss(self):
+        offset = self.flame_param['static_offset'] + self.flame_param['dynamic_offset'][[self.timestep]]
+        verts_wo_offset = (self.verts - offset).detach()
+        verts_w_offset = verts_wo_offset + offset
+
+        L = self.flame_model.laplacian_matrix[None, ...].detach()  # (1, V, V)
+        lap_wo = L.bmm(verts_wo_offset).detach()
+        lap_w = L.bmm(verts_w_offset)
+        diff = (lap_wo - lap_w) ** 2
+        diff = diff.sum(dim=-1, keepdim=True)
+        return diff.mean()
     
     def training_setup(self, training_args):
         super().training_setup(training_args)
 
-        # shape
-        self.flame_param['shape'].requires_grad = True
-        param_shape = {'params': [self.flame_param['shape']], 'lr': 1e-5, "name": "shape"}
-        self.optimizer.add_param_group(param_shape)
+        # # shape
+        # self.flame_param['shape'].requires_grad = True
+        # param_shape = {'params': [self.flame_param['shape']], 'lr': 1e-5, "name": "shape"}
+        # self.optimizer.add_param_group(param_shape)
 
         # pose
         self.flame_param['translation'].requires_grad = True
@@ -123,9 +144,15 @@ class FlameGaussianModel(GaussianModel):
         param_expr = {'params': [self.flame_param['expr']], 'lr': 1e-3, "name": "expr"}
         self.optimizer.add_param_group(param_expr)
 
-        # self.flame_param['dynamic_offset'].requires_grad = True
-        # param_dynamic_offset = {'params': [self.flame_param['dynamic_offset']], 'lr': 1.6e-6, "name": "dynamic_offset"}
-        # self.optimizer.add_param_group(param_dynamic_offset)
+        # # static_offset
+        # self.flame_param['static_offset'].requires_grad = True
+        # param_static_offset = {'params': [self.flame_param['static_offset']], 'lr': 1e-6, "name": "static_offset"}
+        # self.optimizer.add_param_group(param_static_offset)
+
+        # dynamic_offset
+        self.flame_param['dynamic_offset'].requires_grad = True
+        param_dynamic_offset = {'params': [self.flame_param['dynamic_offset']], 'lr': 1.6e-6, "name": "dynamic_offset"}
+        self.optimizer.add_param_group(param_dynamic_offset)
 
     def save_ply(self, path):
         super().save_ply(path)
@@ -143,3 +170,6 @@ class FlameGaussianModel(GaussianModel):
 
         self.flame_param = flame_param
         self.num_timesteps = self.flame_param['expr'].shape[0]  # required by viewers
+
+        # #TODO: remove this
+        # self.flame_param['dynamic_offset'] = torch.zeros_like(self.flame_param['dynamic_offset'])
