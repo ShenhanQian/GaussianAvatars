@@ -99,12 +99,14 @@ class FlameGaussianModel(GaussianModel):
         self.verts_cano = verts_cano
     
     def compute_dynamic_offset_loss(self):
-        loss_dynamic = (self.flame_param['dynamic_offset'][[self.timestep]] - self.flame_param_orig['dynamic_offset'][[self.timestep]]).norm(dim=-1)
+        # loss_dynamic = (self.flame_param['dynamic_offset'][[self.timestep]] - self.flame_param_orig['dynamic_offset'][[self.timestep]]).norm(dim=-1)
+        loss_dynamic = self.flame_param['dynamic_offset'][[self.timestep]].norm(dim=-1)
         return loss_dynamic.mean()
     
     def compute_laplacian_loss(self):
-        offset = self.flame_param['static_offset'] + self.flame_param['dynamic_offset'][[self.timestep]]
-        verts_wo_offset = (self.verts - offset).detach()
+        # offset = self.flame_param['static_offset'] + self.flame_param['dynamic_offset'][[self.timestep]]
+        offset = self.flame_param['dynamic_offset'][[self.timestep]]
+        verts_wo_offset = (self.verts_cano - offset).detach()
         verts_w_offset = verts_wo_offset + offset
 
         L = self.flame_model.laplacian_matrix[None, ...].detach()  # (1, V, V)

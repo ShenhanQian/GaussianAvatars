@@ -139,7 +139,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             losses['xyz'] = gaussians._xyz.norm(dim=1).mean() * opt.lambda_xyz
 
             if opt.lambda_dynamic_offset != 0:
-                losses['dynamic_offset'] = gaussians.compute_dynamic_offset_loss() * opt.lambda_dynamic_offset
+                losses['dy_off'] = gaussians.compute_dynamic_offset_loss() * opt.lambda_dynamic_offset
 
             if opt.lambda_dynamic_offset_std != 0:
                 ti = viewpoint_cam.timestep
@@ -151,7 +151,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 losses['dynamic_offset_std'] = gaussians.flame_param['dynamic_offset'].std(dim=0).mean() * opt.lambda_dynamic_offset_std
         
             if opt.lambda_laplacian != 0:
-                losses['laplacian'] = gaussians.compute_laplacian_loss() * opt.lambda_laplacian
+                losses['lap'] = gaussians.compute_laplacian_loss() * opt.lambda_laplacian
         
         losses['total'] = sum([v for k, v in losses.items()])
         losses['total'].backward()
@@ -165,10 +165,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 postfix = {"Loss": f"{ema_loss_for_log:.{7}f}"}
                 if 'xyz' in losses:
                     postfix["xyz"] = f"{losses['xyz']:.{7}f}"
-                if 'dynamic_offset' in losses:
-                    postfix["dynamic_offset"] = f"{losses['dynamic_offset']:.{7}f}"
-                if 'laplacian' in losses:
-                    postfix["laplacian"] = f"{losses['laplacian']:.{7}f}"
+                if 'dy_off' in losses:
+                    postfix["dy_off"] = f"{losses['dy_off']:.{7}f}"
+                if 'lap' in losses:
+                    postfix["lap"] = f"{losses['lap']:.{7}f}"
                 if 'dynamic_offset_std' in losses:
                     postfix["dynamic_offset_std"] = f"{losses['dynamic_offset_std']:.{7}f}"
                 progress_bar.set_postfix(postfix)
