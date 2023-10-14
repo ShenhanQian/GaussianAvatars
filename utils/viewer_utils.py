@@ -71,8 +71,11 @@ class OrbitCamera:
         self.reset()
     
     def reset(self):
-        self.rot = R.from_matrix([[1, 0, 0], [0, 1, 0], [0, 0, 1]])  # init camera matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] (OpenGL convention)
-        self.camera_center = np.array([0, 0, 0], dtype=np.float32)  # look at this point
+        """ The internal state of the camera is based on the OpenGL convention, but 
+            properties are converted to the target convention when queried.
+        """
+        self.rot = R.from_matrix([[1, 0, 0], [0, 1, 0], [0, 0, 1]])  # OpenGL convention
+        self.look_at = np.array([0, 0, 0], dtype=np.float32)  # look at this point
         self.radius = self.radius_default  # camera distance from center
         self.fovy = self.fovy_default
         if self.convention == "opencv":
@@ -117,7 +120,7 @@ class OrbitCamera:
         pose = rot @ pose
 
         # translate
-        pose[:3, 3] -= self.camera_center
+        pose[:3, 3] -= self.look_at
 
         if self.convention == "opencv":
             pose[:, [1, 2]] *= -1
@@ -140,4 +143,4 @@ class OrbitCamera:
     def pan(self, dx, dy, dz=0):
         # pan in camera coordinate system (careful on the sensitivity!)
         d = np.array([dx, -dy, dz])  # the y axis is flipped
-        self.camera_center += 2 * self.rot.as_matrix()[:3, :3] @ d * self.radius / self.image_height * math.tan(np.radians(self.fovy) / 2)
+        self.look_at += 2 * self.rot.as_matrix()[:3, :3] @ d * self.radius / self.image_height * math.tan(np.radians(self.fovy) / 2)

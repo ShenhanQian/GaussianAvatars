@@ -345,11 +345,9 @@ class GaussianSplattingViewer:
             FoVy = float(np.radians(self.cam.fovy))
             image_height = self.cam.image_height
             image_width = self.cam.image_width
-            
-            world_view_transform = torch.tensor(self.cam.world_view_transform).float().cuda().T
-            full_proj_transform = torch.tensor(self.cam.full_proj_transform).float().cuda().T
-
-            camera_center = torch.tensor(self.cam.camera_center).cuda()
+            world_view_transform = torch.tensor(self.cam.world_view_transform).float().cuda().T  # the transpose is required by gaussian splatting rasterizer
+            full_proj_transform = torch.tensor(self.cam.full_proj_transform).float().cuda().T  # the transpose is required by gaussian splatting rasterizer
+            camera_center = torch.tensor(self.cam.pose[:3, 3]).cuda()
         return Cam
 
     def run(self):
