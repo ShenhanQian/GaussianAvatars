@@ -151,10 +151,10 @@ class FlameGaussianModel(GaussianModel):
         # param_static_offset = {'params': [self.flame_param['static_offset']], 'lr': 1e-6, "name": "static_offset"}
         # self.optimizer.add_param_group(param_static_offset)
 
-        # dynamic_offset
-        self.flame_param['dynamic_offset'].requires_grad = True
-        param_dynamic_offset = {'params': [self.flame_param['dynamic_offset']], 'lr': 1.6e-6, "name": "dynamic_offset"}
-        self.optimizer.add_param_group(param_dynamic_offset)
+        # # dynamic_offset
+        # self.flame_param['dynamic_offset'].requires_grad = True
+        # param_dynamic_offset = {'params': [self.flame_param['dynamic_offset']], 'lr': 1.6e-6, "name": "dynamic_offset"}
+        # self.optimizer.add_param_group(param_dynamic_offset)
 
     def save_ply(self, path):
         super().save_ply(path)
@@ -172,6 +172,3 @@ class FlameGaussianModel(GaussianModel):
 
         self.flame_param = flame_param
         self.num_timesteps = self.flame_param['expr'].shape[0]  # required by viewers
-
-        # #TODO: remove this
-        # self.flame_param['dynamic_offset'] = torch.zeros_like(self.flame_param['dynamic_offset'])
