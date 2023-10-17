@@ -12,7 +12,11 @@ class FlameGaussianModel(GaussianModel):
     def __init__(self, sh_degree : int, n_shape=300, n_expr=100):
         super().__init__(sh_degree)
 
-        self.flame_model = FlameHead(n_shape, n_expr, add_teeth=True).cuda()
+        self.flame_model = FlameHead(
+            n_shape, 
+            n_expr,
+            add_teeth=True
+        ).cuda()
         self.flame_param = None
         self.flame_param_orig = None
 
