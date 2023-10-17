@@ -12,7 +12,7 @@ class FlameGaussianModel(GaussianModel):
     def __init__(self, sh_degree : int, n_shape=300, n_expr=100):
         super().__init__(sh_degree)
 
-        self.flame_model = FlameHead(n_shape, n_expr).cuda()
+        self.flame_model = FlameHead(n_shape, n_expr, add_teeth=True).cuda()
         self.flame_param = None
         self.flame_param_orig = None
 
@@ -28,7 +28,12 @@ class FlameGaussianModel(GaussianModel):
             pose_meshes = meshes if len(tgt_meshes) == 0 else tgt_meshes
             
             self.num_timesteps = max(pose_meshes) + 1  # required by viewers
-            num_verts = meshes[0]['static_offset'].shape[1]
+            num_verts = self.flame_model.v_template.shape[0]
+
+            static_offset = torch.from_numpy(meshes[0]['static_offset'])
+            if static_offset.shape[0] != num_verts:
+                static_offset = torch.nn.functional.pad(static_offset, (0, 0, 0, num_verts - meshes[0]['static_offset'].shape[1]))
+
             T = self.num_timesteps
 
             self.flame_param = {
@@ -39,7 +44,7 @@ class FlameGaussianModel(GaussianModel):
                 'jaw_pose': torch.zeros([T, 3]),
                 'eyes_pose': torch.zeros([T, 6]),
                 'translation': torch.zeros([T, 3]),
-                'static_offset': torch.from_numpy(meshes[0]['static_offset']),
+                'static_offset': static_offset,
                 'dynamic_offset': torch.zeros([T, num_verts, 3]),
             }
 
@@ -125,25 +130,28 @@ class FlameGaussianModel(GaussianModel):
         # self.optimizer.add_param_group(param_shape)
 
         # pose
-        self.flame_param['translation'].requires_grad = True
         self.flame_param['rotation'].requires_grad = True
         self.flame_param['neck_pose'].requires_grad = True
         self.flame_param['jaw_pose'].requires_grad = True
         self.flame_param['eyes_pose'].requires_grad = True
         param_pose = {
             'params': [
-                self.flame_param['translation'],
                 self.flame_param['rotation'],
                 self.flame_param['neck_pose'],
                 self.flame_param['jaw_pose'],
                 self.flame_param['eyes_pose'],
             ], 
-        'lr': 1e-6, "name": "pose"}
+        'lr': training_args.flame_pose_lr, "name": "pose"}
         self.optimizer.add_param_group(param_pose)
+
+        # translation
+        self.flame_param['translation'].requires_grad = True
+        param_trans = {'params': [self.flame_param['translation']], 'lr': training_args.flame_trans_lr, "name": "trans"}
+        self.optimizer.add_param_group(param_trans)
         
         # expression
         self.flame_param['expr'].requires_grad = True
-        param_expr = {'params': [self.flame_param['expr']], 'lr': 1e-3, "name": "expr"}
+        param_expr = {'params': [self.flame_param['expr']], 'lr': training_args.flame_expr_lr, "name": "expr"}
         self.optimizer.add_param_group(param_expr)
 
         # # static_offset
