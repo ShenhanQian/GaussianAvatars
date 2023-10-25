@@ -315,7 +315,7 @@ class RemoteViewer:
                     def callback_show_splatting(sender, app_data):
                         self.show_splatting = app_data
                         self.need_update = True
-                    dpg.add_checkbox(label="show splatting", default_value=self.show_splatting, callback=callback_show_splatting)
+                    dpg.add_checkbox(label="show splatting ", default_value=self.show_splatting, callback=callback_show_splatting)
 
                     def callback_show_mesh(sender, app_data):
                         self.show_mesh = app_data
@@ -338,16 +338,16 @@ class RemoteViewer:
                     dpg.set_value("_slider_frame_id", self.timestep)
                     self.need_update = True
                 with dpg.group(horizontal=True):
+                    dpg.add_slider_int(label="frame id", tag='_slider_frame_id', width=155, min_value=0, max_value=self.num_timesteps - 1, format="%d", default_value=0, callback=callback_set_current_frame)
                     dpg.add_button(label='-', tag="_button_frame_id_minus", callback=callback_set_current_frame)
                     dpg.add_button(label='+', tag="_button_frame_id_plus", callback=callback_set_current_frame)
-                    dpg.add_slider_int(label="frame id", tag='_slider_frame_id', width=180, min_value=0, max_value=self.num_timesteps - 1, format="%d", default_value=0, callback=callback_set_current_frame)
 
                 # mesh_opacity slider
                 def callback_set_opacity(sender, app_data):
                     self.mesh_opacity = app_data
                     if self.show_mesh:
                         self.need_update = True
-                dpg.add_slider_float(label="mesh opacity", min_value=0, max_value=1.0, format="%.2f", default_value=self.mesh_opacity, callback=callback_set_opacity)
+                dpg.add_slider_float(label="mesh opacity", width=155, min_value=0, max_value=1.0, format="%.2f", default_value=self.mesh_opacity, callback=callback_set_opacity)
 
         #         # mesh_color picker
         #         def callback_change_mesh_color(sender, app_data):
@@ -365,25 +365,25 @@ class RemoteViewer:
                 def callback_set_znear(sender, app_data):
                     self.cam.znear = app_data
                     self.need_update = True
-                dpg.add_slider_float(label="near", min_value=0, max_value=2, format="%.5f", default_value=self.cam.znear, callback=callback_set_znear, tag="_slider_near")
+                dpg.add_slider_float(label="near", width=155, min_value=0, max_value=2, format="%.5f", default_value=self.cam.znear, callback=callback_set_znear, tag="_slider_near")
 
                 # far slider
                 def callback_set_far(sender, app_data):
                     self.cam.zfar = app_data
                     self.need_update = True
-                dpg.add_slider_float(label="far", min_value=1e-3, max_value=2, format="%.5f", default_value=self.cam.zfar, callback=callback_set_far, tag="_slider_far")
+                dpg.add_slider_float(label="far", width=155, min_value=1e-3, max_value=2, format="%.5f", default_value=self.cam.zfar, callback=callback_set_far, tag="_slider_far")
 
                 # fov slider
                 def callback_set_fovy(sender, app_data):
                     self.cam.fovy = app_data
                     self.need_update = True
-                dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy")
+                dpg.add_slider_int(label="FoV (vertical)", width=155, min_value=1, max_value=120, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy")
 
                 # scaling_modifier slider
                 def callback_set_scaling_modifier(sender, app_data):
                     self.scaling_modifier = app_data
                     self.need_update = True
-                dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=1, format="%.2f", default_value=self.scaling_modifier, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
+                dpg.add_slider_float(label="Scale modifier", width=155, min_value=0, max_value=1, format="%.2f", default_value=self.scaling_modifier, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
 
                 
                 dpg.add_separator()
@@ -464,14 +464,17 @@ class RemoteViewer:
                     self.cam.pan(ddx, ddy)
                     self.need_update = True
 
-        def callback_camera_wheel_scale(sender, app_data):
-            if not dpg.is_item_focused("_render_window"):
-                return
+        def callbackmouse_wheel(sender, app_data):
             delta = app_data
-            self.cam.scale(delta)
-            self.need_update = True
-            if self.debug:
-                dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
+            if dpg.is_item_focused("_render_window"):
+                self.cam.scale(delta)
+                self.need_update = True
+                if self.debug:
+                    dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
+            else:
+                self.timestep = min(max(self.timestep - delta, 0), self.num_timesteps - 1)
+                dpg.set_value("_slider_frame_id", self.timestep)
+                self.need_update = True
 
         with dpg.handler_registry():
             # this registry order helps avoid false fire
@@ -479,7 +482,7 @@ class RemoteViewer:
             # dpg.add_mouse_drag_handler(callback=callback_mouse_drag)  # not using the drag callback, since it does not return the starting point
             dpg.add_mouse_move_handler(callback=callback_mouse_move)
             dpg.add_mouse_down_handler(callback=callback_mouse_button_down)
-            dpg.add_mouse_wheel_handler(callback=callback_camera_wheel_scale)
+            dpg.add_mouse_wheel_handler(callback=callbackmouse_wheel)
 
             # key press handlers
             dpg.add_key_press_handler(dpg.mvKey_Left, callback=callback_set_current_frame, tag='_mvKey_Left')

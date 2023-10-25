@@ -170,7 +170,7 @@ class GaussianModel:
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
         self._features_dc = nn.Parameter(features[:,:,0:1].transpose(1, 2).contiguous().requires_grad_(True))
         self._features_rest = nn.Parameter(features[:,:,1:].transpose(1, 2).contiguous().requires_grad_(True))
-        print("Number of points at initialisation : ", self.get_xyz.shape[0])
+        print("Number of points at initialisation: ", self.get_xyz.shape[0])
 
         dist2 = torch.clamp_min(distCUDA2(self.get_xyz), 0.0000001)
         scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)

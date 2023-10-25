@@ -6,7 +6,7 @@ from scipy.spatial.transform import Rotation as R
 
 def projection_from_intrinsics(K: np.ndarray, image_size: Tuple[int], near: float=0.01, far:float=10, flip_y: bool=False, z_sign=-1):
     """
-    Transform points from camera space (x: right, y: up, z: out) to clip space (x: right, y: down, z: in)
+    Transform points from camera space (x: right, y: up, z: out) to clip space (x: right, y: up, z: in)
     Args:
         K: Intrinsic matrix, (N, 3, 3)
             K = [[

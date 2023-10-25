@@ -21,7 +21,7 @@ from scene import Scene, GaussianModel, FlameGaussianModel
 from utils.general_utils import safe_state
 import uuid
 from tqdm import tqdm
-from utils.image_utils import psnr
+from utils.image_utils import psnr, error_map
 from lpipsPyTorch import lpips
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
@@ -114,11 +114,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             iter_camera_train = iter(loader_camera_train)
             viewpoint_cam = next(iter_camera_train)
 
-        # # Pick a random Camera
-        # if not viewpoint_stack:
-        #     viewpoint_stack = scene.getTrainCameras().copy()
-        # viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
-
         if gaussians.binding != None:
             gaussians.select_mesh_by_timestep(viewpoint_cam.timestep)
 
@@ -179,7 +174,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # Log and save
             training_report(tb_writer, iteration, losses, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             if (iteration in saving_iterations):
-                print("\n[ITER {}] Saving Gaussians".format(iteration))
+                print("[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
             # Densification
@@ -201,7 +196,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 gaussians.optimizer.zero_grad(set_to_none = True)
 
             if (iteration in checkpoint_iterations):
-                print("\n[ITER {}] Saving Checkpoint".format(iteration))
+                print("[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
 def prepare_output_and_logger(args):    
@@ -243,12 +238,11 @@ def training_report(tb_writer, iteration, losses, elapsed, testing_iterations, s
 
     # Report test and samples of training set
     if iteration in testing_iterations:
-        print("\n[ITER {}] Evaluating".format(iteration))
+        print("[ITER {}] Evaluating".format(iteration))
         torch.cuda.empty_cache()
         validation_configs = (
+            {'name': 'val', 'cameras' : scene.getValCameras()},
             {'name': 'test', 'cameras' : scene.getTestCameras()},
-            # {'name': 'train', 'cameras' : [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in range(5, 30, 5)]},
-            {'name': 'train', 'cameras' : scene.getTrainCameras()},
         )
 
         for config in validation_configs:
@@ -256,32 +250,47 @@ def training_report(tb_writer, iteration, losses, elapsed, testing_iterations, s
                 l1_test = 0.0
                 psnr_test = 0.0
                 ssim_test = 0.0
-                # lpips_test = 0.0
+                lpips_test = 0.0
+                num_vis_img = 10
+                image_cache = []
+                gt_image_cache = []
+                vis_ct = 0
                 for idx, viewpoint in tqdm(enumerate(DataLoader(config['cameras'], shuffle=False, batch_size=None, num_workers=8)), total=len(config['cameras'])):
                     if hasattr(scene.gaussians, "select_mesh_by_timestep"):
                         scene.gaussians.select_mesh_by_timestep(viewpoint.timestep)
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
-                    if tb_writer and (idx % (len(config['cameras']) // 5) == 0):
-                        tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
+                    if tb_writer and (idx % (len(config['cameras']) // num_vis_img) == 0):
+                        tb_writer.add_images(config['name'] + "_{}/render".format(vis_ct), image[None], global_step=iteration)
+                        error_image = error_map(image, gt_image)
+                        tb_writer.add_images(config['name'] + "_{}/error".format(vis_ct), error_image[None], global_step=iteration)
                         if iteration == testing_iterations[0]:
-                            tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
+                            tb_writer.add_images(config['name'] + "_{}/ground_truth".format(vis_ct), gt_image[None], global_step=iteration)
+                        vis_ct += 1
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
                     ssim_test += ssim(image, gt_image).mean().double()
-                    # lpips_test += lpips(image, gt_image, net_type='vgg').mean().double()
+
+                    if len(image_cache) < 16:
+                        image_cache.append(image)
+                        gt_image_cache.append(gt_image)
+                    else:
+                        batch_img = torch.stack(image_cache, dim=0)
+                        batch_gt_img = torch.stack(gt_image_cache, dim=0)
+                        lpips_test += lpips(batch_img, batch_gt_img).sum().double()
+                        image_cache = []
+                        gt_image_cache = []
 
                 psnr_test /= len(config['cameras'])
                 l1_test /= len(config['cameras'])          
-                # lpips_test /= len(config['cameras'])          
+                lpips_test /= len(config['cameras'])          
                 ssim_test /= len(config['cameras'])          
-                # print("\n[ITER {}] Evaluating {}: L1 {:.4f} PSNR {:.4f} SSIM {:.4f} LPIPS {:.4f}".format(iteration, config['name'], l1_test, psnr_test, ssim_test, lpips_test))
-                print("\n[ITER {}] Evaluation ({}): L1 {:.4f} PSNR {:.4f} SSIM {:.4f}\n".format(iteration, config['name'], l1_test, psnr_test, ssim_test))
+                print("[ITER {}] Evaluating {}: L1 {:.4f} PSNR {:.4f} SSIM {:.4f} LPIPS {:.4f}".format(iteration, config['name'], l1_test, psnr_test, ssim_test, lpips_test))
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - ssim', ssim_test, iteration)
-                    # tb_writer.add_scalar(config['name'] + '/loss_viewpoint - lpips', lpips_test, iteration)
+                    tb_writer.add_scalar(config['name'] + '/loss_viewpoint - lpips', lpips_test, iteration)
 
         if tb_writer:
             tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)

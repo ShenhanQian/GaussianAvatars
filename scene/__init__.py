@@ -98,6 +98,7 @@ class Scene:
 
         # process cameras
         self.train_cameras = {}
+        self.val_cameras = {}
         self.test_cameras = {}
         
         if not self.loaded_iter:
@@ -110,6 +111,8 @@ class Scene:
                 camlist.extend(scene_info.test_cameras)
             if scene_info.train_cameras:
                 camlist.extend(scene_info.train_cameras)
+            if scene_info.val_cameras:
+                camlist.extend(scene_info.val_cameras)
             for id, cam in enumerate(camlist):
                 json_cams.append(camera_to_JSON(id, cam))
             with open(os.path.join(self.model_path, "cameras.json"), 'w') as file:
@@ -117,6 +120,7 @@ class Scene:
 
         if shuffle:
             random.shuffle(scene_info.train_cameras)  # Multi-res consistent random shuffling
+            random.shuffle(scene_info.val_cameras)  # Multi-res consistent random shuffling
             random.shuffle(scene_info.test_cameras)  # Multi-res consistent random shuffling
 
         self.cameras_extent = scene_info.nerf_normalization["radius"]
@@ -124,6 +128,8 @@ class Scene:
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
+            print("Loading Validation Cameras")
+            self.val_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.val_cameras, resolution_scale, args)
             print("Loading Test Cameras")
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
         
@@ -147,6 +153,9 @@ class Scene:
 
     def getTrainCameras(self, scale=1.0):
         return CameraDataset(self.train_cameras[scale])
+    
+    def getValCameras(self, scale=1.0):
+        return CameraDataset(self.val_cameras[scale])
 
     def getTestCameras(self, scale=1.0):
         return CameraDataset(self.test_cameras[scale])

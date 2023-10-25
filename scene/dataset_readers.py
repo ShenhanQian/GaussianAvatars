@@ -44,6 +44,7 @@ class SceneInfo(NamedTuple):
     nerf_normalization: dict
     point_cloud: Optional[BasicPointCloud]
     ply_path: Optional[str]
+    val_cameras: Optional[list]
     train_meshes: Optional[dict]
     test_meshes: Optional[dict]
     tgt_train_meshes: Optional[dict]
@@ -301,6 +302,12 @@ def readDynamicNerfInfo(path, white_background, eval, extension=".png", target_p
     else:
         tgt_train_mesh_infos = {}
     
+    print("Reading Validation Transforms")
+    if target_path != "":
+        val_cam_infos = readCamerasFromTransforms(target_path, "transforms_val.json", white_background, extension)
+    else:
+        val_cam_infos = readCamerasFromTransforms(path, "transforms_val.json", white_background, extension)
+    
     print("Reading Test Transforms")
     if target_path != "":
         test_cam_infos = readCamerasFromTransforms(target_path, "transforms_test.json", white_background, extension)
@@ -316,6 +323,8 @@ def readDynamicNerfInfo(path, white_background, eval, extension=".png", target_p
         tgt_test_mesh_infos = {}
     
     if target_path != "" or not eval:
+        train_cam_infos.extend(val_cam_infos)
+        val_cam_infos = []
         train_cam_infos.extend(test_cam_infos)
         test_cam_infos = []
         train_mesh_infos.update(test_mesh_infos)
@@ -325,6 +334,7 @@ def readDynamicNerfInfo(path, white_background, eval, extension=".png", target_p
 
     scene_info = SceneInfo(point_cloud=None,
                            train_cameras=train_cam_infos,
+                           val_cameras=val_cam_infos,
                            test_cameras=test_cam_infos,
                            nerf_normalization=nerf_normalization,
                            ply_path=None,
