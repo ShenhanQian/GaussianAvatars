@@ -54,6 +54,7 @@ class RemoteViewer:
         self.last_time_fresh = None
         self.timestep = 0  # the chosen timestep of the dataset
         self.num_timesteps = 1
+        self.num_points = 0
         self.render_buffer = np.ones((self.W, self.H, 3), dtype=np.float32)
         self.need_update = True  # camera moved, should reset accumulation
         self.debug = True
@@ -159,7 +160,9 @@ class RemoteViewer:
         rec_dict = json.loads(message.decode("utf-8"))
 
         self.num_timesteps = rec_dict["num_timesteps"]
+        self.num_points = rec_dict["num_points"]
         dpg.configure_item("_slider_frame_id", max_value=self.num_timesteps - 1)
+        dpg.set_value("_log_num_points", self.num_points)
     
     def reconnect(self):
         try: 
@@ -223,6 +226,10 @@ class RemoteViewer:
             with dpg.group(horizontal=True):
                 dpg.add_text("FPS: ")
                 dpg.add_text("", tag="_log_fps")
+
+            with dpg.group(horizontal=True):
+                dpg.add_text("number of points: ")
+                dpg.add_text("", tag="_log_num_points")
 
             # train button
             with dpg.collapsing_header(label="Train", default_open=True):

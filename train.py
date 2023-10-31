@@ -92,7 +92,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                             net_image = rgb_mesh * alpha_mesh * mesh_opacity  + net_image * (alpha_mesh * (1 - mesh_opacity) + (1 - alpha_mesh))
 
                     # send data
-                    net_dict = {'num_timesteps': gaussians.num_timesteps}
+                    net_dict = {'num_timesteps': gaussians.num_timesteps, 'num_points': gaussians._xyz.shape[0]}
                     network_gui.send(net_image, net_dict)
                 if msg['do_training'] and ((iteration < int(opt.iterations)) or not msg['keep_alive']):
                     break
