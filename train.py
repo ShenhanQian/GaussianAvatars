@@ -271,10 +271,10 @@ def training_report(tb_writer, iteration, losses, elapsed, testing_iterations, s
                     psnr_test += psnr(image, gt_image).mean().double()
                     ssim_test += ssim(image, gt_image).mean().double()
 
-                    if len(image_cache) < 16:
-                        image_cache.append(image)
-                        gt_image_cache.append(gt_image)
-                    else:
+                    image_cache.append(image)
+                    gt_image_cache.append(gt_image)
+
+                    if idx == len(config['cameras']) - 1 or len(image_cache) == 16:
                         batch_img = torch.stack(image_cache, dim=0)
                         batch_gt_img = torch.stack(gt_image_cache, dim=0)
                         lpips_test += lpips(batch_img, batch_gt_img).sum().double()
