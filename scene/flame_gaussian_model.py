@@ -96,8 +96,8 @@ class FlameGaussianModel(GaussianModel):
         # position
         self.face_center = triangles.mean(dim=-2).squeeze(0)
 
-        # rotate
-        self.face_orien_mat = compute_face_orientation(verts, faces).squeeze(0)
+        # orientation and scale
+        self.face_orien_mat, self.face_scaling = compute_face_orientation(verts.squeeze(0), faces.squeeze(0), return_scale=True)
         self.face_orien_quat = matrix_to_quaternion(self.face_orien_mat)
 
         # for mesh rendering

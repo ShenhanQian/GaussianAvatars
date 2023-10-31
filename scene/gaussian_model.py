@@ -62,6 +62,7 @@ class GaussianModel:
 
         # for binding GaussianModel to a mesh
         self.face_center = None
+        self.face_scaling = None
         self.face_orien_mat = None
         self.face_orien_quat = None
         self.binding = None  # gaussian index to face index
@@ -109,7 +110,11 @@ class GaussianModel:
 
     @property
     def get_scaling(self):
-        return self.scaling_activation(self._scaling)
+        if self.binding is None:
+            return self.scaling_activation(self._scaling)
+        else:
+            scaling = self.scaling_activation(self._scaling)
+            return scaling * self.face_scaling[self.binding]
     
     @property
     def get_rotation(self):
@@ -149,7 +154,7 @@ class GaussianModel:
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
     
     def select_mesh_by_timestep(self, timestep):
-        pass
+        raise NotImplementedError
 
     def oneupSHdegree(self):
         if self.active_sh_degree < self.max_sh_degree:
@@ -172,8 +177,11 @@ class GaussianModel:
         self._features_rest = nn.Parameter(features[:,:,1:].transpose(1, 2).contiguous().requires_grad_(True))
         print("Number of points at initialisation: ", self.get_xyz.shape[0])
 
-        dist2 = torch.clamp_min(distCUDA2(self.get_xyz), 0.0000001)
-        scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)
+        if self.binding is None:
+            dist2 = torch.clamp_min(distCUDA2(self.get_xyz), 0.0000001)
+            scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)
+        else:
+            scales = torch.log(torch.ones((self.get_xyz.shape[0], 3), device="cuda"))
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
 
@@ -438,7 +446,12 @@ class GaussianModel:
         new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1)
         if self.binding == None:
             new_xyz += self.get_xyz[selected_pts_mask].repeat(N, 1)
-        new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
+        if self.binding != None:
+            selected_scaling = self.get_scaling[selected_pts_mask]
+            face_scaling = self.face_scaling[self.binding[selected_pts_mask]]
+            new_scaling = self.scaling_inverse_activation((selected_scaling / face_scaling).repeat(N,1) / (0.8*N))
+        else:
+            new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
         new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
         new_features_dc = self._features_dc[selected_pts_mask].repeat(N,1,1)
         new_features_rest = self._features_rest[selected_pts_mask].repeat(N,1,1)

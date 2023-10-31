@@ -12,6 +12,7 @@
 import os
 import torch
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 from random import randint
 from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
@@ -133,6 +134,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if gaussians.binding != None:
             losses['xyz'] = gaussians._xyz.norm(dim=1).mean() * opt.lambda_xyz
 
+            if opt.lambda_scale != 0:
+                losses['scale'] = F.relu(gaussians._scaling).norm(dim=1).mean() * opt.lambda_scale
+
             if opt.lambda_dynamic_offset != 0:
                 losses['dy_off'] = gaussians.compute_dynamic_offset_loss() * opt.lambda_dynamic_offset
 
@@ -160,6 +164,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 postfix = {"Loss": f"{ema_loss_for_log:.{7}f}"}
                 if 'xyz' in losses:
                     postfix["xyz"] = f"{losses['xyz']:.{7}f}"
+                if 'scale' in losses:
+                    postfix["scale"] = f"{losses['scale']:.{7}f}"
                 if 'dy_off' in losses:
                     postfix["dy_off"] = f"{losses['dy_off']:.{7}f}"
                 if 'lap' in losses:
@@ -227,6 +233,8 @@ def training_report(tb_writer, iteration, losses, elapsed, testing_iterations, s
         tb_writer.add_scalar('train_loss_patches/ssim_loss', losses['ssim'].item(), iteration)
         if 'xyz' in losses:
             tb_writer.add_scalar('train_loss_patches/xyz_loss', losses['xyz'].item(), iteration)
+        if 'scale' in losses:
+            tb_writer.add_scalar('train_loss_patches/scale_loss', losses['scale'].item(), iteration)
         if 'dynamic_offset' in losses:
             tb_writer.add_scalar('train_loss_patches/dynamic_offset', losses['dynamic_offset'].item(), iteration)
         if 'laplacian' in losses:
