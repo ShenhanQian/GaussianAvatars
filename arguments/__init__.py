@@ -56,8 +56,7 @@ class ModelParams(ParamGroup):
         self.data_device = "cuda"
         self.eval = False
         self.bind_to_mesh = False
-        self.load_cam_begin = 0
-        self.load_cam_step = 1
+        self.select_camera_id = -1
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):

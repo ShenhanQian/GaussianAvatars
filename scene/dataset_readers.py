@@ -37,6 +37,7 @@ class CameraInfo(NamedTuple):
     width: int
     height: int
     timestep: Optional[int]
+    camera_id: Optional[int]
 
 class SceneInfo(NamedTuple):
     train_cameras: list
@@ -230,11 +231,13 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             FovX = fovx
 
             timestep = frame["timestep_index"] if 'timestep_index' in frame else None
+            camera_id = frame["camera_index"] if 'camera_id' in frame else None
             
             cam_infos.append(CameraInfo(
                 uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, bg=bg, #image=image, 
                 image_path=image_path, image_name=image_name, 
-                width=frame['w'], height=frame['h'], timestep=timestep))
+                width=frame['w'], height=frame['h'], 
+                timestep=timestep, camera_id=camera_id))
     return cam_infos
 
 def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):

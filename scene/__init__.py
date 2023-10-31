@@ -140,10 +140,13 @@ class Scene:
         
         # create gaussians
         if self.loaded_iter:
-            self.gaussians.load_ply(os.path.join(self.model_path,
-                                                           "point_cloud",
-                                                           "iteration_" + str(self.loaded_iter),
-                                                           "point_cloud.ply"))
+            self.gaussians.load_ply(
+                os.path.join(self.model_path,
+                            "point_cloud",
+                            "iteration_" + str(self.loaded_iter),
+                            "point_cloud.ply"),
+                has_target=args.target_path != "",
+            )
         else:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 
