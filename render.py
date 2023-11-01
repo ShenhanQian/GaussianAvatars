@@ -15,28 +15,73 @@ from scene import Scene
 import os
 from tqdm import tqdm
 from os import makedirs
+import concurrent.futures
+import multiprocessing
+from pathlib import Path
+from tqdm import tqdm
+from PIL import Image
+import numpy as np
+
 from gaussian_renderer import render
-import torchvision
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel, FlameGaussianModel
 
+
+def write_data(path2data):
+    for path, data in path2data.items():
+        if not path.parent.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+
+        if path.suffix in [".png", ".jpg"]:
+            data = data.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+            Image.fromarray(data).save(path)
+        elif path.suffix in [".obj"]:
+            with open(path, "w") as f:
+                f.write(data)
+        elif path.suffix in [".txt"]:
+            with open(path, "w") as f:
+                f.write(data)
+        elif path.suffix in [".npz"]:
+            np.savez(path, **data)
+        else:
+            raise NotImplementedError(f"Unknown file type: {path.suffix}")
+
 def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipeline, background):
-    render_path = os.path.join(dataset.model_path, name, "ours_{}".format(iteration), "renders")
-    gts_path = os.path.join(dataset.model_path, name, "ours_{}".format(iteration), "gt")
+    iter_path = Path(dataset.model_path) / name / f"ours_{iteration}"
+    render_path = iter_path / "renders"
+    gts_path = iter_path / "gt"
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
 
     views_loader = DataLoader(views, batch_size=None, shuffle=False, num_workers=8)
+    max_threads = multiprocessing.cpu_count()
+    print('Max threads: ', max_threads)
+    worker_args = []
     for idx, view in enumerate(tqdm(views_loader, desc="Rendering progress")):
         if gaussians.binding != None:
             gaussians.select_mesh_by_timestep(view.timestep)
         rendering = render(view, gaussians, pipeline, background)["render"]
         gt = view.original_image[0:3, :, :]
-        torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
-        torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
+
+        path2data = {}
+        path2data[Path(render_path) / f'{idx:05d}.png'] = rendering
+        path2data[Path(gts_path) / f'{idx:05d}.png'] = gt
+        worker_args.append([path2data])
+
+        if len(worker_args) == max_threads or idx == len(views_loader)-1:
+            with concurrent.futures.ThreadPoolExecutor(max_threads) as executor:
+                futures = [executor.submit(write_data, *args) for args in worker_args]
+                concurrent.futures.wait(futures)
+            worker_args = []
+    
+    try:
+        os.system(f"ffmpeg -framerate 25 -f image2 -pattern_type glob -i '{render_path}/*.png' -pix_fmt yuv420p {iter_path}/renders.mp4")
+        os.system(f"ffmpeg -framerate 25 -f image2 -pattern_type glob -i '{gts_path}/*.png' -pix_fmt yuv420p {iter_path}/gt.mp4")
+    except Exception as e:
+        print(e)
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_val : bool, skip_test : bool):
     with torch.no_grad():
