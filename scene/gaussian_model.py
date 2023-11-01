@@ -113,6 +113,9 @@ class GaussianModel:
         if self.binding is None:
             return self.scaling_activation(self._scaling)
         else:
+            if self.face_scaling is None:
+                self.select_mesh_by_timestep(0)
+
             scaling = self.scaling_activation(self._scaling)
             return scaling * self.face_scaling[self.binding]
     
@@ -138,7 +141,7 @@ class GaussianModel:
                 self.select_mesh_by_timestep(0)
             
             xyz = torch.bmm(self.face_orien_mat[self.binding], self._xyz[..., None]).squeeze(-1)
-            return xyz + self.face_center[self.binding]
+            return xyz * self.face_scaling[self.binding] + self.face_center[self.binding]
 
     @property
     def get_features(self):
