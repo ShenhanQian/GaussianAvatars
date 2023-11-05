@@ -74,21 +74,23 @@ class PipelineParams(ParamGroup):
 class OptimizationParams(ParamGroup):
     def __init__(self, parser):
         self.iterations = 30_000
-        self.position_lr_init = 0.00016
-        self.position_lr_final = 0.0000016
+        self.position_lr_init = 0.005  # (scaled up according to mean triangle scale)  #0.00016 (original)
+        self.position_lr_final = 0.00005  # (scaled up according to mean triangle scale) # 0.0000016 (original)
         self.position_lr_delay_mult = 0.01
         self.position_lr_max_steps = 30_000
         self.feature_lr = 0.0025
         self.opacity_lr = 0.05
-        self.scaling_lr = 0.005
+        self.scaling_lr = 0.017  # (scaled up according to mean triangle scale)  # 0.005 (original)
         self.rotation_lr = 0.001
         self.flame_expr_lr = 1e-3
         self.flame_trans_lr = 1e-6
         self.flame_pose_lr = 1e-5
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
-        self.lambda_xyz = 1.
+        self.lambda_xyz = 1e-2
+        self.threshold_xyz = 1.
         self.lambda_scale = 1.
+        self.threshold_scale = 0.6
         self.lambda_dynamic_offset = 0.
         self.lambda_laplacian = 0.
         self.lambda_dynamic_offset_std = 0  #1.

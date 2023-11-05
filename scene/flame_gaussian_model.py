@@ -15,7 +15,7 @@ class FlameGaussianModel(GaussianModel):
         self.flame_model = FlameHead(
             n_shape, 
             n_expr,
-            add_teeth=True
+            add_teeth=True,
         ).cuda()
         self.flame_param = None
         self.flame_param_orig = None
@@ -51,6 +51,8 @@ class FlameGaussianModel(GaussianModel):
                 'static_offset': static_offset,
                 'dynamic_offset': torch.zeros([T, num_verts, 3]),
             }
+            if self.flame_model.has_neck_base_joint:
+                self.flame_param['neck_base_pose'] = torch.zeros([T, 3])
 
             for i, mesh in pose_meshes.items():
                 self.flame_param['expr'][i] = torch.from_numpy(mesh['expr'])
@@ -60,6 +62,8 @@ class FlameGaussianModel(GaussianModel):
                 self.flame_param['eyes_pose'][i] = torch.from_numpy(mesh['eyes_pose'])
                 self.flame_param['translation'][i] = torch.from_numpy(mesh['translation'])
                 # self.flame_param['dynamic_offset'][i] = torch.from_numpy(mesh['dynamic_offset'])
+                if 'neck_base_pose' in mesh:
+                    self.flame_param['neck_base_pose'][i] = torch.from_numpy(mesh['neck_base_pose'])
             
             for k, v in self.flame_param.items():
                 self.flame_param[k] = v.float().cuda()
@@ -74,6 +78,11 @@ class FlameGaussianModel(GaussianModel):
         self.timestep = timestep
         flame_param = self.flame_param_orig if original and self.flame_param_orig != None else self.flame_param
 
+        if self.flame_model.has_neck_base_joint and 'neck_base_pose' in flame_param:
+            neck_base = flame_param['neck_base_pose'][[timestep]]
+        else:
+            neck_base = None
+
         verts, verts_cano = self.flame_model(
             flame_param['shape'][None, ...],
             flame_param['expr'][[timestep]],
@@ -83,11 +92,11 @@ class FlameGaussianModel(GaussianModel):
             flame_param['eyes_pose'][[timestep]],
             flame_param['translation'][[timestep]],
             zero_centered_at_root_node=False,
-            use_rotation_limits=False,
             return_landmarks=False,
             return_verts_cano=True,
             static_offset=flame_param['static_offset'],
             dynamic_offset=flame_param['dynamic_offset'][[timestep]],
+            neck_base=neck_base,
         )
 
         faces = self.flame_model.faces
@@ -138,14 +147,16 @@ class FlameGaussianModel(GaussianModel):
         self.flame_param['neck_pose'].requires_grad = True
         self.flame_param['jaw_pose'].requires_grad = True
         self.flame_param['eyes_pose'].requires_grad = True
-        param_pose = {
-            'params': [
-                self.flame_param['rotation'],
-                self.flame_param['neck_pose'],
-                self.flame_param['jaw_pose'],
-                self.flame_param['eyes_pose'],
-            ], 
-        'lr': training_args.flame_pose_lr, "name": "pose"}
+        params = [
+            self.flame_param['rotation'],
+            self.flame_param['neck_pose'],
+            self.flame_param['jaw_pose'],
+            self.flame_param['eyes_pose'],
+        ]
+        if self.flame_model.has_neck_base_joint:
+            self.flame_param['neck_base_pose'].requires_grad = True
+            params.append(self.flame_param['neck_base_pose'])
+        param_pose = {'params': params, 'lr': training_args.flame_pose_lr, "name": "pose"}
         self.optimizer.add_param_group(param_pose)
 
         # translation

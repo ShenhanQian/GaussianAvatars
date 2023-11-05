@@ -133,11 +133,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         if gaussians.binding != None:
             # losses['xyz'] = gaussians._xyz.norm(dim=1).mean() * opt.lambda_xyz
-            losses['xyz'] = F.relu(gaussians._xyz.norm(dim=1) - 1).mean() * opt.lambda_xyz
+            losses['xyz'] = F.relu(gaussians._xyz.norm(dim=1) - opt.threshold_xyz).mean() * opt.lambda_xyz
 
             if opt.lambda_scale != 0:
                 # losses['scale'] = F.relu(gaussians._scaling).norm(dim=1).mean() * opt.lambda_scale
-                losses['scale'] = F.relu(torch.exp(gaussians._scaling) - 1).norm(dim=1).mean() * opt.lambda_scale
+                losses['scale'] = F.relu(torch.exp(gaussians._scaling) - opt.threshold_scale).norm(dim=1).mean() * opt.lambda_scale
 
             if opt.lambda_dynamic_offset != 0:
                 losses['dy_off'] = gaussians.compute_dynamic_offset_loss() * opt.lambda_dynamic_offset

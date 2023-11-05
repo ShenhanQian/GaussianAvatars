@@ -280,14 +280,18 @@ class GaussianSplattingViewer:
                     self.cam.pan(ddx, ddy)
                     self.need_update = True
 
-        def callback_camera_wheel_scale(sender, app_data):
-            if not dpg.is_item_focused("_render_window"):
-                return
+        def callbackmouse_wheel(sender, app_data):
             delta = app_data
-            self.cam.scale(delta)
-            self.need_update = True
-            if self.debug:
-                dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
+            if dpg.is_item_focused("_render_window"):
+                self.cam.scale(delta)
+                self.need_update = True
+                if self.debug:
+                    dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
+            else:
+                self.timestep = min(max(self.timestep - delta, 0), self.num_timesteps - 1)
+                dpg.set_value("_slider_timestep", self.timestep)
+                self.gaussians.select_mesh_by_timestep(self.timestep)
+                self.need_update = True
 
         with dpg.handler_registry():
             # this registry order helps avoid false fire
@@ -295,7 +299,7 @@ class GaussianSplattingViewer:
             # dpg.add_mouse_drag_handler(callback=callback_mouse_drag)  # not using the drag callback, since it does not return the starting point
             dpg.add_mouse_move_handler(callback=callback_mouse_move)
             dpg.add_mouse_down_handler(callback=callback_mouse_button_down)
-            dpg.add_mouse_wheel_handler(callback=callback_camera_wheel_scale)
+            dpg.add_mouse_wheel_handler(callback=callbackmouse_wheel)
 
             # key press handlers
             dpg.add_key_press_handler(dpg.mvKey_Left, callback=callback_set_current_frame, tag='_mvKey_Left')
@@ -356,7 +360,7 @@ class GaussianSplattingViewer:
 
         if self.cfg.file_path is not None:
             if self.cfg.file_path.exists():
-                self.gaussians.load_ply(self.cfg.file_path)
+                self.gaussians.load_ply(self.cfg.file_path, has_target=False)
             else:
                 raise FileNotFoundError(f'{self.cfg.file_path} does not exist.')
         
