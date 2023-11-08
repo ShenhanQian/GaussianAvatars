@@ -1,6 +1,7 @@
 from typing import Tuple, Literal
 import nvdiffrast.torch as dr
 import torch
+import torch.nn.functional as F
 import numpy as np
 from vht.util import vector_ops as V
 from scene.cameras import MiniCam
@@ -14,6 +15,7 @@ class NVDiffRenderer(torch.nn.Module):
             lighting_space: Literal['camera', 'world'] = 'camera',
         ):
         super().__init__()
+        self.use_opengl = use_opengl
         self.lighting_type = lighting_type
         self.lighting_space = lighting_space
         self.glctx = dr.RasterizeGLContext() if use_opengl else dr.RasterizeCudaContext()
@@ -185,9 +187,20 @@ class NVDiffRenderer(torch.nn.Module):
         full_proj_transform[:,1] = -full_proj_transform[:,1]
         full_proj = full_proj_transform.T[None, ...]
 
-        image_size = cam.image_height, cam.image_width
+        if self.use_opengl:
+            image_size = cam.image_height, cam.image_width
+            
+            return self.render_mesh(verts, faces, RT, full_proj, image_size, background_color)
+        else:
+            if cam.image_height > 2048 or cam.image_width > 2048:
+                image_size = 2048, 2048
+            else:
+                image_size = int(cam.image_height // 8 * 8), int(cam.image_width // 8 * 8)
 
-        return self.render_mesh(verts, faces, RT, full_proj, image_size, background_color)
+            output = self.render_mesh(verts, faces, RT, full_proj, image_size, background_color)
+            for k, v in output.items():
+                output[k] = F.interpolate(v.permute(0, 3, 1, 2), (cam.image_height, cam.image_width), mode='bilinear').permute(0, 2, 3, 1)
+            return output
     
     def render_mesh(
         self, verts, faces, RT, full_proj, image_size, background_color=[1., 1., 1.],

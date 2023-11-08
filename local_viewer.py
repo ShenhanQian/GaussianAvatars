@@ -10,6 +10,7 @@ import torch
 from utils.viewer_utils import OrbitCamera
 from gaussian_renderer import GaussianModel, FlameGaussianModel
 from gaussian_renderer import render
+from mesh_renderer import NVDiffRenderer
 
 
 @dataclass
@@ -68,6 +69,9 @@ class GaussianSplattingViewer:
         self.scaling_modifier: float = 1
         self.num_timesteps = 1
         self.timestep = 0
+        self.show_spatting = True
+        self.show_mesh = False
+        self.mesh_opacity = 0.5
 
         self.define_gui()
 
@@ -111,25 +115,19 @@ class GaussianSplattingViewer:
         #             self.need_update = True
         #         dpg.add_combo(('rgb', 'depth', 'opacity'), label='render mode', default_value=self.render_mode, callback=callback_change_mode)
 
-        #         with dpg.group(horizontal=True):
-        #             # show nerf
-        #             def callback_show_nerf(sender, app_data):
-        #                 self.show_nerf = app_data
-        #                 self.need_update = True
-        #             dpg.add_checkbox(label="show NeRF", default_value=self.show_nerf, callback=callback_show_nerf)
+                with dpg.group(horizontal=True):
+                    # show nerf
+                    def callback_show_splatting(sender, app_data):
+                        self.show_spatting = app_data
+                        self.need_update = True
+                    dpg.add_checkbox(label="show Splatting", default_value=self.show_spatting, callback=callback_show_splatting)
 
-        #             # canonical space
-        #             def callback_canonical_space(sender, app_data):
-        #                 self.canonical_space = app_data
-        #                 self.need_update = True
-        #             dpg.add_checkbox(label="canonical space", default_value=self.canonical_space, callback=callback_canonical_space)
-
-        #         with dpg.group(horizontal=True):
-        #             # show mesh
-        #             def callback_show_mesh(sender, app_data):
-        #                 self.show_mesh = app_data
-        #                 self.need_update = True
-        #             dpg.add_checkbox(label="show mesh", default_value=self.canonical_space, callback=callback_show_mesh)
+                with dpg.group(horizontal=True):
+                    # show mesh
+                    def callback_show_mesh(sender, app_data):
+                        self.show_mesh = app_data
+                        self.need_update = True
+                    dpg.add_checkbox(label="show mesh", default_value=self.show_mesh, callback=callback_show_mesh)
 
         #             # show original mesh
         #             def callback_original_mesh(sender, app_data):
@@ -160,12 +158,12 @@ class GaussianSplattingViewer:
                         dpg.add_button(label='+', tag="_button_timestep_plus", callback=callback_set_current_frame)
                         dpg.add_slider_int(label="timestep", tag='_slider_timestep', width=180, min_value=0, max_value=self.num_timesteps - 1, format="%d", default_value=0, callback=callback_set_current_frame)
 
-        #         # mesh_opacity slider
-        #         def callback_set_opacity(sender, app_data):
-        #             self.mesh_opacity = app_data
-        #             if self.show_mesh:
-        #                 self.need_update = True
-        #         dpg.add_slider_float(label="mesh opacity", min_value=0, max_value=1.0, format="%.2f", default_value=self.mesh_opacity, callback=callback_set_opacity)
+                # mesh_opacity slider
+                def callback_set_opacity(sender, app_data):
+                    self.mesh_opacity = app_data
+                    if self.show_mesh:
+                        self.need_update = True
+                dpg.add_slider_float(label="mesh opacity", min_value=0, max_value=1.0, format="%.2f", default_value=self.mesh_opacity, callback=callback_set_opacity)
 
         #         # mesh_color picker
         #         def callback_change_mesh_color(sender, app_data):
@@ -354,9 +352,12 @@ class GaussianSplattingViewer:
             camera_center = torch.tensor(self.cam.pose[:3, 3]).cuda()
         return Cam
 
+    @torch.no_grad()
     def run(self):
         # self.gaussians = GaussianModel(self.cfg.sh_degree)
         self.gaussians = FlameGaussianModel(self.cfg.sh_degree)
+
+        mesh_renderer = NVDiffRenderer(use_opengl=False)
 
         if self.cfg.file_path is not None:
             if self.cfg.file_path.exists():
@@ -374,10 +375,28 @@ class GaussianSplattingViewer:
 
             if self.need_update:
                 self.rendering = True
-                with torch.no_grad():
-                    cam = self.prepare_camera()
-                    rendering = render(cam, self.gaussians, self.cfg.pipeline, torch.tensor(self.cfg.background_color).cuda(), scaling_modifier=self.scaling_modifier)["render"].permute(1, 2, 0).contiguous()
-                self.render_buffer = rendering.cpu().numpy()
+                cam = self.prepare_camera()
+
+                if self.show_spatting:
+                    rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, torch.tensor(self.cfg.background_color).cuda(), scaling_modifier=self.scaling_modifier)["render"].permute(1, 2, 0).contiguous()
+
+                if self.gaussians.binding != None and self.show_mesh:
+                    out_dict = mesh_renderer.render_from_camera(self.gaussians.verts, self.gaussians.faces, cam)
+
+                    rgba_mesh = out_dict['rgba'].squeeze(0)  # (H, W, C)
+                    rgb_mesh = rgba_mesh[:, :, :3]
+                    alpha_mesh = rgba_mesh[:, :, 3:]
+
+                if self.show_spatting and self.show_mesh:
+                    rgb = rgb_mesh * alpha_mesh * self.mesh_opacity  + rgb_splatting * (alpha_mesh * (1 - self.mesh_opacity) + (1 - alpha_mesh))
+                elif self.show_spatting and not self.show_mesh:
+                    rgb = rgb_splatting
+                elif not self.show_spatting and self.show_mesh:
+                    rgb = rgb_mesh
+                else:
+                    rgb = torch.ones([self.H, self.W, 3])
+
+                self.render_buffer = rgb.cpu().numpy()
                 self.refresh()
                 self.rendering = False
                 self.need_update = False
