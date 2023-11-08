@@ -30,9 +30,9 @@ class Config:
     """Spherical Harmonics degree"""
     render_mode: Literal['rgb', 'depth', 'opacity'] = 'rgb'
     """NeRF rendering mode"""
-    W: int = 960
+    W: int = 1080
     """GUI width"""
-    H: int = 540
+    H: int = 1080
     """GUI height"""
     radius: float = 1
     """default GUI camera radius from center"""
@@ -72,6 +72,7 @@ class GaussianSplattingViewer:
         self.show_spatting = True
         self.show_mesh = False
         self.mesh_opacity = 0.5
+        self.mesh_color = torch.tensor([1, 1, 1, 0.5])
 
         self.define_gui()
 
@@ -120,7 +121,7 @@ class GaussianSplattingViewer:
                     def callback_show_splatting(sender, app_data):
                         self.show_spatting = app_data
                         self.need_update = True
-                    dpg.add_checkbox(label="show Splatting", default_value=self.show_spatting, callback=callback_show_splatting)
+                    dpg.add_checkbox(label="show splatting", default_value=self.show_spatting, callback=callback_show_splatting)
 
                 with dpg.group(horizontal=True):
                     # show mesh
@@ -158,6 +159,12 @@ class GaussianSplattingViewer:
                         dpg.add_button(label='+', tag="_button_timestep_plus", callback=callback_set_current_frame)
                         dpg.add_slider_int(label="timestep", tag='_slider_timestep', width=180, min_value=0, max_value=self.num_timesteps - 1, format="%d", default_value=0, callback=callback_set_current_frame)
 
+                # scaling_modifier slider
+                def callback_set_scaling_modifier(sender, app_data):
+                    self.scaling_modifier = app_data
+                    self.need_update = True
+                dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=1, format="%.2f", default_value=self.scaling_modifier, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
+                
                 # mesh_opacity slider
                 def callback_set_opacity(sender, app_data):
                     self.mesh_opacity = app_data
@@ -165,11 +172,11 @@ class GaussianSplattingViewer:
                         self.need_update = True
                 dpg.add_slider_float(label="mesh opacity", min_value=0, max_value=1.0, format="%.2f", default_value=self.mesh_opacity, callback=callback_set_opacity)
 
-        #         # mesh_color picker
-        #         def callback_change_mesh_color(sender, app_data):
-        #             self.mesh_color = torch.tensor(app_data[:3], dtype=torch.float32)  # only need RGB in [0, 1]
-        #             self.need_update = True
-        #         dpg.add_color_edit((self.mesh_color*255).tolist(), label="Mesh Color", width=200, no_alpha=True, callback=callback_change_mesh_color)
+                # mesh_color picker
+                def callback_change_mesh_color(sender, app_data):
+                    self.mesh_color = torch.tensor(app_data, dtype=torch.float32)  # only need RGB in [0, 1]
+                    self.need_update = True
+                dpg.add_color_edit((self.mesh_color*255).tolist(), label="Mesh Color", width=200, callback=callback_change_mesh_color)
 
         #         # bg_color picker
         #         def callback_change_bg(sender, app_data):
@@ -194,12 +201,6 @@ class GaussianSplattingViewer:
                     self.cam.fovy = app_data
                     self.need_update = True
                 dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy")
-
-                # scaling_modifier slider
-                def callback_set_scaling_modifier(sender, app_data):
-                    self.scaling_modifier = app_data
-                    self.need_update = True
-                dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=1, format="%.2f", default_value=self.scaling_modifier, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
 
                 def callback_reset_camera(sender, app_data):
                     self.cam.reset()
@@ -388,7 +389,9 @@ class GaussianSplattingViewer:
                     alpha_mesh = rgba_mesh[:, :, 3:]
 
                 if self.show_spatting and self.show_mesh:
-                    rgb = rgb_mesh * alpha_mesh * self.mesh_opacity  + rgb_splatting * (alpha_mesh * (1 - self.mesh_opacity) + (1 - alpha_mesh))
+                    mesh_color = self.mesh_color[:3].cuda()
+                    mesh_opacity = self.mesh_color[3:].cuda()
+                    rgb = rgb_mesh * alpha_mesh * mesh_color * mesh_opacity  + rgb_splatting * (alpha_mesh * (1 - mesh_opacity) + (1 - alpha_mesh))
                 elif self.show_spatting and not self.show_mesh:
                     rgb = rgb_splatting
                 elif not self.show_spatting and self.show_mesh:
