@@ -6,6 +6,7 @@ import time
 import dearpygui.dearpygui as dpg
 import numpy as np
 import torch
+from PIL import Image
 
 from utils.viewer_utils import OrbitCamera
 from gaussian_renderer import GaussianModel, FlameGaussianModel
@@ -30,17 +31,18 @@ class Config:
     """Spherical Harmonics degree"""
     render_mode: Literal['rgb', 'depth', 'opacity'] = 'rgb'
     """NeRF rendering mode"""
-    W: int = 1080
+    W: int = 1440
     """GUI width"""
-    H: int = 1080
+    H: int = 1440
     """GUI height"""
     radius: float = 1
     """default GUI camera radius from center"""
-    fovy: float = 30
+    fovy: float = 20
     """default GUI camera fovy"""
     background_color: tuple[float] = (1., 1., 1.)
-
-
+    """default GUI background color"""
+    save_folder: Path = Path("./viewer_output")
+    """default saving folder"""
 
 class GaussianSplattingViewer:
     def __init__(self, cfg: Config):
@@ -71,7 +73,6 @@ class GaussianSplattingViewer:
         self.timestep = 0
         self.show_spatting = True
         self.show_mesh = False
-        self.mesh_opacity = 0.5
         self.mesh_color = torch.tensor([1, 1, 1, 0.5])
 
         self.define_gui()
@@ -165,13 +166,6 @@ class GaussianSplattingViewer:
                     self.need_update = True
                 dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=1, format="%.2f", default_value=self.scaling_modifier, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
                 
-                # mesh_opacity slider
-                def callback_set_opacity(sender, app_data):
-                    self.mesh_opacity = app_data
-                    if self.show_mesh:
-                        self.need_update = True
-                dpg.add_slider_float(label="mesh opacity", min_value=0, max_value=1.0, format="%.2f", default_value=self.mesh_opacity, callback=callback_set_opacity)
-
                 # mesh_color picker
                 def callback_change_mesh_color(sender, app_data):
                     self.mesh_color = torch.tensor(app_data, dtype=torch.float32)  # only need RGB in [0, 1]
@@ -209,12 +203,20 @@ class GaussianSplattingViewer:
                         dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
                     dpg.set_value("_slider_fovy", self.cam.fovy)
                 
-                dpg.add_separator()
                 with dpg.group(horizontal=True):
                     dpg.add_button(label="reset", tag="_button_reset_pose", callback=callback_reset_camera)
                     with dpg.collapsing_header(label="Camera Pose", default_open=False):
                         dpg.add_text(str(self.cam.pose.astype(np.float16)), tag="_log_pose")
             
+                dpg.add_separator()
+                def callback_save_image(sender, app_data):
+                    if not self.cfg.save_folder.exists():
+                        self.cfg.save_folder.mkdir(parents=True)
+                    path = self.cfg.save_folder / f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{self.timestep}.png"
+                    print(f"Saving image to {path}")
+                    Image.fromarray((np.clip(self.render_buffer, 0, 1) * 255).astype(np.uint8)).save(path)
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="save image", tag="_button_save_image", callback=callback_save_image)
 
         ### register mouse handlers ========================================================================================
 
@@ -360,9 +362,14 @@ class GaussianSplattingViewer:
 
         mesh_renderer = NVDiffRenderer(use_opengl=False)
 
+        # selected_fid = self.gaussians.flame_model.mask.get_fid_by_region(['left_half'])
+        # selected_fid = self.gaussians.flame_model.mask.get_fid_by_region(['right_half'])
+        # unselected_fid = self.gaussians.flame_model.mask.get_fid_except_fids(selected_fid)
+        unselected_fid = []
+        
         if self.cfg.file_path is not None:
             if self.cfg.file_path.exists():
-                self.gaussians.load_ply(self.cfg.file_path, has_target=False)
+                self.gaussians.load_ply(self.cfg.file_path, has_target=False, disable_fid=unselected_fid)
             else:
                 raise FileNotFoundError(f'{self.cfg.file_path} does not exist.')
         
@@ -371,6 +378,9 @@ class GaussianSplattingViewer:
             dpg.configure_item("_slider_timestep", max_value=self.num_timesteps - 1)
 
             self.gaussians.select_mesh_by_timestep(self.timestep)
+        
+        faces = self.gaussians.faces.clone()
+        # faces = faces[selected_fid]
         
         while dpg.is_dearpygui_running():
 
@@ -382,7 +392,7 @@ class GaussianSplattingViewer:
                     rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, torch.tensor(self.cfg.background_color).cuda(), scaling_modifier=self.scaling_modifier)["render"].permute(1, 2, 0).contiguous()
 
                 if self.gaussians.binding != None and self.show_mesh:
-                    out_dict = mesh_renderer.render_from_camera(self.gaussians.verts, self.gaussians.faces, cam)
+                    out_dict = mesh_renderer.render_from_camera(self.gaussians.verts, faces, cam)
 
                     rgba_mesh = out_dict['rgba'].squeeze(0)  # (H, W, C)
                     rgb_mesh = rgba_mesh[:, :, :3]

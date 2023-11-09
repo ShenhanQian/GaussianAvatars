@@ -196,3 +196,14 @@ class FlameGaussianModel(GaussianModel):
 
             self.flame_param = flame_param
             self.num_timesteps = self.flame_param['expr'].shape[0]  # required by viewers
+        
+        if 'disable_fid' in kwargs and len(kwargs['disable_fid']) > 0:
+            mask = (self.binding[:, None] != kwargs['disable_fid'][None, :]).all(-1)
+
+            self.binding = self.binding[mask]
+            self._xyz = self._xyz[mask]
+            self._features_dc = self._features_dc[mask]
+            self._features_rest = self._features_rest[mask]
+            self._scaling = self._scaling[mask]
+            self._rotation = self._rotation[mask]
+            self._opacity = self._opacity[mask]
