@@ -3,14 +3,12 @@
 # Define a list of subjects and sequences
 # SUBJECTS=("055" "074" "104" "140" "165" "210" "218" "221" "238" "251" "253" "264" "302" "304" "306" "375")  # 16
 # SUBJECTS=("074" "104" "140" "165" "218" "238" "253" "264" "302" "304" "306")  #11
-# SUBJECTS=("074" "104" "218" "238" "253" "264" "302" "304" "306")  #9
-# SUBJECTS=("074" "104" "140" "165" "210" "218" "238" "253" "264" "302" "304" "306")  #V2 (#12)
-# SUBJECTS=("104" "140" "165" "210" "218" "238" "253" "264" "302" "304" "306")  #V2 (#12)  /wo 074
-# SUBJECTS=("074")  # tmp
+# SUBJECTS=("074" "104" "140" "165" "210" "218" "238" "253" "264" "302" "304" "306" "460")  #V2 (#13)
+# SUBJECTS=("460")  # tmp
 
 
 # TGT_SUBJECTS=("074" "104" "140" "165" "210" "218" "238" "251" "253" "264" "302" "304" "306")  # 12
-# TGT_SUBJECTS=("074" "104" "140" "165" "210" "218" "238" "251" "253" "264" "302" "304" "306" "460")  #14 - "494"
+# TGT_SUBJECTS=("074" "104" "140" "165" "210" "218" "238" "253" "264" "302" "304" "306" "460")  #V2 (#13)
 # TGT_SUBJECTS=("306")
 
 
@@ -22,35 +20,35 @@ src_folder=$IKARUS/project/dynamic-head-avatars/code/multi-view-head-tracker/exp
 model_folder=$IKARUS/project/dynamic-head-avatars/code/gaussian-splatting/output/Union10EMOEXP_${SUBJECT}_eval_600k_densifyTilEnd_maskBelowLine
 
 #======= render (val) =======#
-RENDER_VAL="python render.py \
--s $src_folder \
--m $model_folder \
---skip_train --skip_test
-"
+# echo "$SUBJECT (VAL)"
+# RENDER_VAL="python render.py \
+# -s $src_folder \
+# -m $model_folder \
+# --skip_train --skip_test
+# "
 
 #======= render (test) =======#
-RENDER_TEST="python render.py \
--s $src_folder \
--m $model_folder \
---select_camera_id 8 --skip_train --skip_val
-"
+# echo "$SUBJECT (TEST)"
+# RENDER_TEST="python render.py \
+# -s $src_folder \
+# -m $model_folder \
+# --select_camera_id 8 --skip_train --skip_val
+# "
 
 #======= render (tgt) =======#
-for TGT_SUBJECT in "${TGT_SUBJECTS[@]}"; do
-if [ "$SUBJECT" -eq "$TGT_SUBJECT" ]; then
-    continue
-fi
-
-echo "$SUBJECT -> $TGT_SUBJECT "
+# for TGT_SUBJECT in "${TGT_SUBJECTS[@]}"; do
+# if [ "$SUBJECT" -eq "$TGT_SUBJECT" ]; then
+#     continue
+# fi
 
 # tgt_folder=$IKARUS/project/dynamic-head-avatars/code/multi-view-head-tracker/export/UNION_${TGT_SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine
-tgt_folder=$IKARUS/project/dynamic-head-avatars/code/multi-view-head-tracker/export/${TGT_SUBJECT}_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine
-
-RENDER_TGT="python render.py \
--t $tgt_folder \
--m $model_folder \
---select_camera_id 8
-"
+# tgt_folder=$IKARUS/project/dynamic-head-avatars/code/multi-view-head-tracker/export/${TGT_SUBJECT}_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine
+# echo "$SUBJECT -> $TGT_SUBJECT "
+# RENDER_TGT="python render.py \
+# -t $tgt_folder \
+# -m $model_folder \
+# --select_camera_id 8
+# "
 
 
 #------- run -------#
@@ -60,7 +58,7 @@ RENDER_TGT="python render.py \
 # COMMAND="$HOME/usr/bin/isbatch.sh $JOB_NAME $RENDER_TEST"
 # COMMAND=$RENDER_TEST
 
-COMMAND="$HOME/usr/bin/isbatch.sh $JOB_NAME $RENDER_TGT"
+# COMMAND="$HOME/usr/bin/isbatch.sh $JOB_NAME $RENDER_TGT"
 # COMMAND=$RENDER_TGT
 
 # echo $COMMAND

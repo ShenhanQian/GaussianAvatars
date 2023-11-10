@@ -86,7 +86,7 @@ def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipelin
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_val : bool, skip_test : bool):
     with torch.no_grad():
         if dataset.bind_to_mesh:
-            gaussians = FlameGaussianModel(dataset.sh_degree)
+            gaussians = FlameGaussianModel(dataset.sh_degree, dataset.disable_flame_static_offset)
         else:
             gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)

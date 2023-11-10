@@ -398,10 +398,12 @@ class GaussianSplattingViewer:
                     rgb_mesh = rgba_mesh[:, :, :3]
                     alpha_mesh = rgba_mesh[:, :, 3:]
 
-                if self.show_spatting and self.show_mesh:
-                    mesh_color = self.mesh_color[:3].cuda()
                     mesh_opacity = self.mesh_color[3:].cuda()
-                    rgb = rgb_mesh * alpha_mesh * mesh_color * mesh_opacity  + rgb_splatting * (alpha_mesh * (1 - mesh_opacity) + (1 - alpha_mesh))
+                    mesh_color = self.mesh_color[:3].cuda()
+                    rgb_mesh = rgb_mesh * (alpha_mesh * mesh_color * mesh_opacity + (1 - alpha_mesh))
+
+                if self.show_spatting and self.show_mesh:
+                    rgb = rgb_mesh * alpha_mesh  + rgb_splatting * (alpha_mesh * (1 - mesh_opacity) + (1 - alpha_mesh))
                 elif self.show_spatting and not self.show_mesh:
                     rgb = rgb_splatting
                 elif not self.show_spatting and self.show_mesh:

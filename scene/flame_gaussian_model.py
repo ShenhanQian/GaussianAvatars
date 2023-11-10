@@ -9,8 +9,10 @@ from pytorch3d.transforms import matrix_to_quaternion
 
 
 class FlameGaussianModel(GaussianModel):
-    def __init__(self, sh_degree : int, n_shape=300, n_expr=100):
+    def __init__(self, sh_degree : int, disable_flame_static_offset, n_shape=300, n_expr=100):
         super().__init__(sh_degree)
+
+        self.disable_flame_static_offset = disable_flame_static_offset
 
         self.flame_model = FlameHead(
             n_shape, 
@@ -34,9 +36,12 @@ class FlameGaussianModel(GaussianModel):
             self.num_timesteps = max(pose_meshes) + 1  # required by viewers
             num_verts = self.flame_model.v_template.shape[0]
 
-            static_offset = torch.from_numpy(meshes[0]['static_offset'])
-            if static_offset.shape[0] != num_verts:
-                static_offset = torch.nn.functional.pad(static_offset, (0, 0, 0, num_verts - meshes[0]['static_offset'].shape[1]))
+            if not self.disable_flame_static_offset:
+                static_offset = torch.from_numpy(meshes[0]['static_offset'])
+                if static_offset.shape[0] != num_verts:
+                    static_offset = torch.nn.functional.pad(static_offset, (0, 0, 0, num_verts - meshes[0]['static_offset'].shape[1]))
+            else:
+                static_offset = torch.zeros([num_verts, 3])
 
             T = self.num_timesteps
 
