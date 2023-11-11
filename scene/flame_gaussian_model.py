@@ -9,10 +9,11 @@ from pytorch3d.transforms import matrix_to_quaternion
 
 
 class FlameGaussianModel(GaussianModel):
-    def __init__(self, sh_degree : int, disable_flame_static_offset, n_shape=300, n_expr=100):
+    def __init__(self, sh_degree : int, disable_flame_static_offset=False, not_finetune_flame_params=False, n_shape=300, n_expr=100):
         super().__init__(sh_degree)
 
         self.disable_flame_static_offset = disable_flame_static_offset
+        self.not_finetune_flame_params = not_finetune_flame_params
 
         self.flame_model = FlameHead(
             n_shape, 
@@ -141,6 +142,9 @@ class FlameGaussianModel(GaussianModel):
     
     def training_setup(self, training_args):
         super().training_setup(training_args)
+
+        if self.not_finetune_flame_params:
+            return
 
         # # shape
         # self.flame_param['shape'].requires_grad = True

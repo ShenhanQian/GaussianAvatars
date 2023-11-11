@@ -4,7 +4,8 @@
 # SUBJECTS=("055" "074" "104" "140" "165" "210" "218" "221" "238" "251" "253" "264" "302" "304" "306" "375")  # 16
 # SUBJECTS=("074" "104" "140" "165" "218" "238" "253" "264" "302" "304" "306")  #11
 # SUBJECTS=("074" "104" "140" "165" "210" "218" "238" "253" "264" "302" "304" "306" "460")  #V2 (#13)
-# SUBJECTS=("460")  # tmp
+# SUBJECTS=("304")  # tmp
+# SUBJECTS=("175")  # new
 
 
 # TGT_SUBJECTS=("074" "104" "140" "165" "210" "218" "238" "251" "253" "264" "302" "304" "306")  # 12
@@ -40,8 +41,7 @@ model_folder=$IKARUS/project/dynamic-head-avatars/code/gaussian-splatting/output
 # if [ "$SUBJECT" -eq "$TGT_SUBJECT" ]; then
 #     continue
 # fi
-
-# tgt_folder=$IKARUS/project/dynamic-head-avatars/code/multi-view-head-tracker/export/UNION_${TGT_SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine
+# # tgt_folder=$IKARUS/project/dynamic-head-avatars/code/multi-view-head-tracker/export/UNION_${TGT_SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine
 # tgt_folder=$IKARUS/project/dynamic-head-avatars/code/multi-view-head-tracker/export/${TGT_SUBJECT}_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine
 # echo "$SUBJECT -> $TGT_SUBJECT "
 # RENDER_TGT="python render.py \

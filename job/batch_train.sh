@@ -4,7 +4,7 @@
 # SUBJECTS=("074" "104" "218" "238" "253" "264" "302" "304" "306")  #9
 # SUBJECTS=("074" "104" "140" "165" "210" "218" "238" "253" "264" "302" "304" "306")  #V2 (#12)
 # SUBJECTS=("074" "104" "140" "165" "210" "218" "238" "253" "264" "302" "304" "306" "460" "494")  #V2 (#14)
-# SUBJECTS=("494")  # tmp
+# SUBJECTS=("175")  # tmp
 
 
 # Loop through subjects and sequences and modify the command accordingly

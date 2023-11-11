@@ -57,6 +57,7 @@ class ModelParams(ParamGroup):
         self.eval = False
         self.bind_to_mesh = False
         self.disable_flame_static_offset = False
+        self.not_finetune_flame_params = False
         self.select_camera_id = -1
         super().__init__(parser, "Loading Parameters", sentinel)
 

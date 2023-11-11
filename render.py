@@ -78,15 +78,16 @@ def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipelin
             worker_args = []
     
     try:
-        os.system(f"ffmpeg -framerate 25 -f image2 -pattern_type glob -i '{render_path}/*.png' -pix_fmt yuv420p {iter_path}/renders.mp4")
-        os.system(f"ffmpeg -framerate 25 -f image2 -pattern_type glob -i '{gts_path}/*.png' -pix_fmt yuv420p {iter_path}/gt.mp4")
+        os.system(f"ffmpeg -y -framerate 25 -f image2 -pattern_type glob -i '{render_path}/*.png' -pix_fmt yuv420p {iter_path}/renders.mp4")
+        os.system(f"ffmpeg -y -framerate 25 -f image2 -pattern_type glob -i '{gts_path}/*.png' -pix_fmt yuv420p {iter_path}/gt.mp4")
     except Exception as e:
         print(e)
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_val : bool, skip_test : bool):
     with torch.no_grad():
         if dataset.bind_to_mesh:
-            gaussians = FlameGaussianModel(dataset.sh_degree, dataset.disable_flame_static_offset)
+            # gaussians = FlameGaussianModel(dataset.sh_degree, dataset.disable_flame_static_offset)
+            gaussians = FlameGaussianModel(dataset.sh_degree)
         else:
             gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
