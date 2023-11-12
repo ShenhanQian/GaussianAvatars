@@ -91,8 +91,10 @@ class OptimizationParams(ParamGroup):
         self.lambda_dssim = 0.2
         self.lambda_xyz = 1e-2
         self.threshold_xyz = 1.
+        self.metric_xyz = False
         self.lambda_scale = 1.
         self.threshold_scale = 0.6
+        self.metric_scale = False
         self.lambda_dynamic_offset = 0.
         self.lambda_laplacian = 0.
         self.lambda_dynamic_offset_std = 0  #1.
