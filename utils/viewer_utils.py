@@ -2,6 +2,9 @@ from typing import Tuple, Literal
 import math
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+import json
+from pathlib import Path
+import os
 
 
 def projection_from_intrinsics(K: np.ndarray, image_size: Tuple[int], near: float=0.01, far:float=10, flip_y: bool=False, z_sign=-1):
@@ -58,7 +61,7 @@ def projection_from_intrinsics(K: np.ndarray, image_size: Tuple[int], near: floa
 
 
 class OrbitCamera:
-    def __init__(self, W, H, r=2, fovy=60, znear=0.01, zfar=10, convention: Literal["opengl", "opencv"]="opengl"):
+    def __init__(self, W, H, r=2, fovy=60, znear=0.01, zfar=10, convention: Literal["opengl", "opencv"]="opengl", save_path='camera.json'):
         self.image_width = W
         self.image_height = H
         self.radius_default = r
@@ -66,9 +69,11 @@ class OrbitCamera:
         self.znear = znear
         self.zfar = zfar
         self.convention = convention
+        self.save_path = save_path
 
         self.up = np.array([0, 1, 0], dtype=np.float32)
         self.reset()
+        self.load()
     
     def reset(self):
         """ The internal state of the camera is based on the OpenGL convention, but 
@@ -86,6 +91,29 @@ class OrbitCamera:
             self.y_sign = -1
         else:
             raise ValueError(f"Unknown convention: {self.convention}")
+    
+    def save(self):
+        save_dict = {
+            'rotation': self.rot.as_matrix().tolist(),
+            'look_at': self.look_at.tolist(),
+            'radius': self.radius,
+            'fovy': self.fovy,
+        }
+        with open(self.save_path, "w") as f:
+            json.dump(save_dict, f, indent=4)
+    
+    def clear(self):
+        os.remove(self.save_path)
+    
+    def load(self):
+        if not Path(self.save_path).exists():
+            return
+        with open(self.save_path, "r") as f:
+            load_dict = json.load(f)
+        self.rot = R.from_matrix(np.array(load_dict['rotation']))
+        self.look_at = np.array(load_dict['look_at'])
+        self.radius = load_dict['radius']
+        self.fovy = load_dict['fovy']
 
     @property
     def fovx(self):

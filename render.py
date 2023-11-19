@@ -49,6 +49,8 @@ def write_data(path2data):
             raise NotImplementedError(f"Unknown file type: {path.suffix}")
 
 def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipeline, background):
+    if dataset.select_camera_id != -1:
+        name = f"{name}_{dataset.select_camera_id}"
     iter_path = Path(dataset.model_path) / name / f"ours_{iteration}"
     render_path = iter_path / "renders"
     gts_path = iter_path / "gt"

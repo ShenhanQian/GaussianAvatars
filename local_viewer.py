@@ -25,8 +25,10 @@ class PipelineConfig:
 class Config:
     pipeline: PipelineConfig
     """Pipeline settings for gaussian splatting rendering"""
-    file_path: Optional[Path] = None
+    point_path: Optional[Path] = None
     """Path to the gaussian splatting file"""
+    motion_path: Optional[Path] = None
+    """Path to the motion file (npz)"""
     sh_degree: int = 3
     """Spherical Harmonics degree"""
     render_mode: Literal['rgb', 'depth', 'opacity'] = 'rgb'
@@ -196,17 +198,25 @@ class GaussianSplattingViewer:
                     self.need_update = True
                 dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy")
 
-                def callback_reset_camera(sender, app_data):
-                    self.cam.reset()
-                    self.need_update = True
-                    if self.debug:
-                        dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
-                    dpg.set_value("_slider_fovy", self.cam.fovy)
-                
                 with dpg.group(horizontal=True):
-                    dpg.add_button(label="reset", tag="_button_reset_pose", callback=callback_reset_camera)
-                    with dpg.collapsing_header(label="Camera Pose", default_open=False):
-                        dpg.add_text(str(self.cam.pose.astype(np.float16)), tag="_log_pose")
+                    def callback_reset_camera(sender, app_data):
+                        self.cam.reset()
+                        self.need_update = True
+                        if self.debug:
+                            dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
+                        dpg.set_value("_slider_fovy", self.cam.fovy)
+                    dpg.add_button(label="reset camera", tag="_button_reset_pose", callback=callback_reset_camera)
+                    
+                    def callback_save_camera(sender, app_data):
+                        self.cam.save()
+                    dpg.add_button(label="save camera", tag="_button_save_pose", callback=callback_save_camera)
+
+                    def callback_clear_camera(sender, app_data):
+                        self.cam.clear()
+                    dpg.add_button(label="clear camera", tag="_button_clear_pose", callback=callback_clear_camera)
+
+                with dpg.collapsing_header(label="Camera Pose", default_open=False):
+                    dpg.add_text(str(self.cam.pose.astype(np.float16)), tag="_log_pose")
             
                 dpg.add_separator()
                 def callback_save_image(sender, app_data):
@@ -367,11 +377,11 @@ class GaussianSplattingViewer:
         # unselected_fid = self.gaussians.flame_model.mask.get_fid_except_fids(selected_fid)
         unselected_fid = []
         
-        if self.cfg.file_path is not None:
-            if self.cfg.file_path.exists():
-                self.gaussians.load_ply(self.cfg.file_path, has_target=False, disable_fid=unselected_fid)
+        if self.cfg.point_path is not None:
+            if self.cfg.point_path.exists():
+                self.gaussians.load_ply(self.cfg.point_path, has_target=False, motion_path=self.cfg.motion_path, disable_fid=unselected_fid)
             else:
-                raise FileNotFoundError(f'{self.cfg.file_path} does not exist.')
+                raise FileNotFoundError(f'{self.cfg.point_path} does not exist.')
         
         if self.gaussians.binding != None:
             self.num_timesteps = self.gaussians.num_timesteps
