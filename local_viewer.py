@@ -498,9 +498,17 @@ class GaussianSplattingViewer:
                         self.keyframes[idx] = states
                     dpg.add_button(label="update", tag="_button_update_keyframe", callback=callback_update_keyframe)
 
-            def callback_set_update_cycles(sender, app_data):
-                self.update_record_timeline()
-            dpg.add_input_int(label="cycles", tag="_input_cycles", default_value=0, width=100, callback=callback_set_update_cycles)
+            with dpg.group(horizontal=True):
+                def callback_set_record_cycles(sender, app_data):
+                    self.update_record_timeline()
+                dpg.add_input_int(label="cycles", tag="_input_cycles", default_value=0, width=70, callback=callback_set_record_cycles)
+
+                def callback_set_keyframe_interval(sender, app_data):
+                    self.cfg.keyframe_interval = app_data
+                    for keyframe in self.keyframes:
+                        keyframe['interval'] = self.cfg.fps*self.cfg.keyframe_interval
+                    self.update_record_timeline()
+                dpg.add_input_int(label="interval", tag="_input_interval", default_value=self.cfg.keyframe_interval, width=70, callback=callback_set_keyframe_interval)
             
             def callback_set_record_timestep(sender, app_data):
                 state_dict = self.get_state_dict_record()
@@ -511,6 +519,7 @@ class GaussianSplattingViewer:
             
             with dpg.group(horizontal=True):
                 dpg.add_checkbox(label="dynamic", default_value=False, tag="_checkbox_dynamic_record")
+                dpg.add_checkbox(label="loop", default_value=True, tag="_checkbox_loop_record")
             
             with dpg.group(horizontal=True):
                 def callback_play(sender, app_data):
@@ -775,7 +784,8 @@ class GaussianSplattingViewer:
                 if self.playing:
                     record_timestep = dpg.get_value("_slider_record_timestep")
                     if record_timestep >= self.num_record_timeline - 1:
-                        self.playing = False
+                        if not dpg.get_value("_checkbox_loop_record"):
+                            self.playing = False
                         dpg.set_value("_slider_record_timestep", 0)
                     else:
                         dpg.set_value("_slider_record_timestep", record_timestep + 1)
