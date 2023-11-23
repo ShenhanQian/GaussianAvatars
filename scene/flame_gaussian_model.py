@@ -14,6 +14,8 @@ class FlameGaussianModel(GaussianModel):
 
         self.disable_flame_static_offset = disable_flame_static_offset
         self.not_finetune_flame_params = not_finetune_flame_params
+        self.n_shape = n_shape
+        self.n_expr = n_expr
 
         self.flame_model = FlameHead(
             n_shape, 
@@ -80,6 +82,32 @@ class FlameGaussianModel(GaussianModel):
             import ipdb; ipdb.set_trace()
             pass
     
+    def update_mesh_by_param_dict(self, flame_param):
+        if 'shape' in flame_param:
+            shape = flame_param['shape']
+        else:
+            shape = self.flame_param['shape']
+
+        if 'static_offset' in flame_param:
+            static_offset = flame_param['static_offset']
+        else:
+            static_offset = self.flame_param['static_offset']
+
+        verts, verts_cano = self.flame_model(
+            shape[None, ...],
+            flame_param['expr'].cuda(),
+            flame_param['rotation'].cuda(),
+            flame_param['neck'].cuda(),
+            flame_param['jaw'].cuda(),
+            flame_param['eyes'].cuda(),
+            flame_param['translation'].cuda(),
+            zero_centered_at_root_node=False,
+            return_landmarks=False,
+            return_verts_cano=True,
+            static_offset=static_offset,
+        )
+        self.update_mesh_properties(verts, verts_cano)
+
     def select_mesh_by_timestep(self, timestep, original=False):
         self.timestep = timestep
         flame_param = self.flame_param_orig if original and self.flame_param_orig != None else self.flame_param
@@ -104,7 +132,9 @@ class FlameGaussianModel(GaussianModel):
             dynamic_offset=flame_param['dynamic_offset'][[timestep]],
             neck_base=neck_base,
         )
-
+        self.update_mesh_properties(verts, verts_cano)
+    
+    def update_mesh_properties(self, verts, verts_cano):
         faces = self.flame_model.faces
         triangles = verts[:, faces]
 
