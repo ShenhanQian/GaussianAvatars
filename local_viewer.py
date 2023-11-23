@@ -1,3 +1,5 @@
+import json
+import math
 import tyro
 from dataclasses import dataclass
 from typing import Literal, Optional
@@ -7,6 +9,8 @@ import dearpygui.dearpygui as dpg
 import numpy as np
 import torch
 from PIL import Image
+from scipy.spatial.transform import Rotation as R
+from scipy.interpolate import interp1d
 
 from utils.viewer_utils import OrbitCamera
 from gaussian_renderer import GaussianModel, FlameGaussianModel
@@ -33,9 +37,9 @@ class Config:
     """Spherical Harmonics degree"""
     render_mode: Literal['rgb', 'depth', 'opacity'] = 'rgb'
     """NeRF rendering mode"""
-    W: int = 1440
+    W: int = 550
     """GUI width"""
-    H: int = 1440
+    H: int = 802
     """GUI height"""
     radius: float = 1
     """default GUI camera radius from center"""
@@ -45,6 +49,12 @@ class Config:
     """default GUI background color"""
     save_folder: Path = Path("./viewer_output")
     """default saving folder"""
+    fps: int = 25
+    """default fps for recording"""
+    keyframe_interval: int = 1
+    """default keyframe interval"""
+    ref_json: Optional[Path] = None
+    """Path to the reference json file. We use this file to complement the exported trajectory json file."""
 
 class GaussianSplattingViewer:
     def __init__(self, cfg: Config):
@@ -77,6 +87,13 @@ class GaussianSplattingViewer:
         self.show_mesh = False
         self.mesh_color = torch.tensor([1, 1, 1, 0.5])
 
+        # recording settings
+        self.keyframes = []  # list of state dicts of keyframes
+        self.all_frames = {}  # state dicts of all frames {key: [num_frames, ...]}
+        self.num_record_timeline = 0
+        self.playing = False
+        
+
         self.define_gui()
 
     def __del__(self):
@@ -90,7 +107,174 @@ class GaussianSplattingViewer:
             fps = 1 / elapsed
             dpg.set_value("_log_fps", f'{fps:.1f}')
         self.last_time_fresh = time.time()
+    
+    def update_record_timeline(self):
+        cycles = dpg.get_value("_input_cycles")
+        if cycles == 0:
+            self.num_record_timeline = sum([keyframe['interval'] for keyframe in self.keyframes[:-1]])
+        else:
+            self.num_record_timeline = sum([keyframe['interval'] for keyframe in self.keyframes]) * cycles
 
+        dpg.configure_item("_slider_record_timestep", min_value=0, max_value=self.num_record_timeline-1)
+
+        if len(self.keyframes) <= 0:
+            self.all_frames = {}
+            return
+        else:
+            k_x = []
+
+            keyframes = self.keyframes.copy()
+            if cycles > 0:
+                # pad a cycle at the beginning and the end to ensure smooth transition
+                keyframes = self.keyframes * (cycles + 2)
+                t_couter = -sum([keyframe['interval'] for keyframe in self.keyframes])
+            else:
+                t_couter = 0
+
+            for keyframe in keyframes:
+                k_x.append(t_couter)
+                t_couter += keyframe['interval']
+            
+            x = np.arange(self.num_record_timeline)
+            self.all_frames = {}
+
+            if len(keyframes) <= 1:
+                for k in keyframes[0]:
+                    k_y = np.concatenate([np.array(keyframe[k])[None] for keyframe in keyframes], axis=0)
+                    self.all_frames[k] = np.tile(k_y, (self.num_record_timeline, 1))
+            else:
+                kind = 'linear' if len(keyframes) <= 3 else 'cubic'
+            
+                for k in keyframes[0]:
+                    if k == 'interval':
+                        continue
+                    k_y = np.concatenate([np.array(keyframe[k])[None] for keyframe in keyframes], axis=0)
+                  
+                    interp_funcs = [interp1d(k_x, k_y[:, i], kind=kind, fill_value='extrapolate') for i in range(k_y.shape[1])]
+
+                    y = np.array([interp_func(x) for interp_func in interp_funcs]).transpose(1, 0)
+                    self.all_frames[k] = y
+
+    def get_state_dict(self):
+        return {
+            'rot': self.cam.rot.as_quat(),
+            'look_at': np.array(self.cam.look_at),
+            'radius': np.array([self.cam.radius]).astype(np.float32),
+            'fovy': np.array([self.cam.fovy]).astype(np.float32),
+            'interval': self.cfg.fps*self.cfg.keyframe_interval,
+        }
+
+    def get_state_dict_record(self):
+        record_timestep = dpg.get_value("_slider_record_timestep")
+        state_dict = {k: self.all_frames[k][record_timestep] for k in self.all_frames}
+        return state_dict
+
+    def apply_state_dict(self, state_dict):
+        if 'rot' in state_dict:
+            self.cam.rot = R.from_quat(state_dict['rot'])
+        if 'look_at' in state_dict:
+            self.cam.look_at = state_dict['look_at']
+        if 'radius' in state_dict:
+            self.cam.radius = state_dict['radius']
+        if 'fovy' in state_dict:
+            self.cam.fovy = state_dict['fovy']
+    
+    def parse_ref_json(self):
+        if self.cfg.ref_json is None:
+            return {}
+        else:
+            with open(self.cfg.ref_json, 'r') as f:
+                ref_dict = json.load(f)
+
+        tid2paths = {}
+        for frame in ref_dict['frames']:
+            tid = frame['timestep_index']
+            if tid not in tid2paths:
+                tid2paths[tid] = frame
+        return tid2paths
+    
+    def export_trajectory(self):
+        tid2paths = self.parse_ref_json()
+
+        if self.num_record_timeline <= 0:
+            return
+        
+        timestamp = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}"
+        traj_dict = {'frames': []}
+        timestep_indices = []
+        camera_indices = []
+        for i in range(self.num_record_timeline):
+            # update
+            dpg.set_value("_slider_record_timestep", i)
+            state_dict = self.get_state_dict_record()
+            self.apply_state_dict(state_dict)
+
+            self.need_update = True
+            while self.need_update:
+                time.sleep(0.001)
+
+            # save image
+            save_folder = self.cfg.save_folder / timestamp
+            if not save_folder.exists():
+                save_folder.mkdir(parents=True)
+            path = save_folder / f"{i:05d}.png"
+            print(f"Saving image to {path}")
+            Image.fromarray((np.clip(self.render_buffer, 0, 1) * 255).astype(np.uint8)).save(path)
+
+            # cache camera parameters
+            cx = self.cam.intrinsics[2]
+            cy = self.cam.intrinsics[3]
+            fl_x = self.cam.intrinsics[0].item() if isinstance(self.cam.intrinsics[0], np.ndarray) else self.cam.intrinsics[0]
+            fl_y = self.cam.intrinsics[1].item() if isinstance(self.cam.intrinsics[1], np.ndarray) else self.cam.intrinsics[1]
+            h = self.cam.image_height
+            w = self.cam.image_width
+            angle_x = math.atan(w / (fl_x * 2)) * 2
+            angle_y = math.atan(h / (fl_y * 2)) * 2
+
+            c2w = self.cam.pose.copy()  # opencv convention
+            c2w[:, [1, 2]] *= -1  # opencv to opengl
+            # transform_matrix = np.linalg.inv(c2w).tolist()  # world2cam
+            
+            timestep_index = self.timestep
+            camera_indx = i
+            timestep_indices.append(timestep_index)
+            camera_indices.append(camera_indx)
+            
+            tid2paths[timestep_index]['file_path']
+
+            frame = {
+                "cx": cx,
+                "cy": cy,
+                "fl_x": fl_x,
+                "fl_y": fl_y,
+                "h": h,
+                "w": w,
+                "camera_angle_x": angle_x,
+                "camera_angle_y": angle_y,
+                "transform_matrix": c2w.tolist(),
+                'timestep_index': timestep_index,
+                'camera_indx': camera_indx,
+                'file_path': tid2paths[timestep_index]['file_path'],
+                'fg_mask_path': tid2paths[timestep_index]['fg_mask_path'],
+                'flame_param_path': tid2paths[timestep_index]['flame_param_path'],
+            }
+            traj_dict['frames'].append(frame)
+
+            # update timestep
+            if dpg.get_value("_checkbox_dynamic_record"):
+                self.timestep = min(self.timestep + 1, self.num_timesteps - 1)
+                dpg.set_value("_slider_timestep", self.timestep)
+                self.gaussians.select_mesh_by_timestep(self.timestep)
+        
+        traj_dict['timestep_indices'] = sorted(list(set(timestep_indices)))
+        traj_dict['camera_indices'] = sorted(list(set(camera_indices)))
+        
+        # save camera parameters
+        path = save_folder / f"trajectory.json"
+        print(f"Saving trajectory to {path}")
+        with open(path, 'w') as f:
+            json.dump(traj_dict, f, indent=4)
+    
     def define_gui(self):
         dpg.create_context()
         
@@ -160,13 +344,13 @@ class GaussianSplattingViewer:
                     with dpg.group(horizontal=True):
                         dpg.add_button(label='-', tag="_button_timestep_minus", callback=callback_set_current_frame)
                         dpg.add_button(label='+', tag="_button_timestep_plus", callback=callback_set_current_frame)
-                        dpg.add_slider_int(label="timestep", tag='_slider_timestep', width=180, min_value=0, max_value=self.num_timesteps - 1, format="%d", default_value=0, callback=callback_set_current_frame)
+                        dpg.add_slider_int(label="timestep", tag='_slider_timestep', width=153, min_value=0, max_value=self.num_timesteps - 1, format="%d", default_value=0, callback=callback_set_current_frame)
 
                 # scaling_modifier slider
                 def callback_set_scaling_modifier(sender, app_data):
                     self.scaling_modifier = app_data
                     self.need_update = True
-                dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=1, format="%.2f", default_value=self.scaling_modifier, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
+                dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=1, format="%.2f", width=200, default_value=self.scaling_modifier, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
                 
                 # mesh_color picker
                 def callback_change_mesh_color(sender, app_data):
@@ -196,8 +380,13 @@ class GaussianSplattingViewer:
                 def callback_set_fovy(sender, app_data):
                     self.cam.fovy = app_data
                     self.need_update = True
-                dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy")
+                dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, width=20, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy")
 
+                # camera
+                if self.debug:
+                    with dpg.collapsing_header(label="Camera Pose", default_open=False):
+                        dpg.add_text(str(self.cam.pose.astype(np.float16)), tag="_log_pose")
+                
                 with dpg.group(horizontal=True):
                     def callback_reset_camera(sender, app_data):
                         self.cam.reset()
@@ -207,18 +396,94 @@ class GaussianSplattingViewer:
                         dpg.set_value("_slider_fovy", self.cam.fovy)
                     dpg.add_button(label="reset camera", tag="_button_reset_pose", callback=callback_reset_camera)
                     
-                    def callback_save_camera(sender, app_data):
+                    def callback_cache_camera(sender, app_data):
                         self.cam.save()
-                    dpg.add_button(label="save camera", tag="_button_save_pose", callback=callback_save_camera)
+                    dpg.add_button(label="cache camera", tag="_button_cache_pose", callback=callback_cache_camera)
 
-                    def callback_clear_camera(sender, app_data):
+                    def callback_clear_cache(sender, app_data):
                         self.cam.clear()
-                    dpg.add_button(label="clear camera", tag="_button_clear_pose", callback=callback_clear_camera)
+                    dpg.add_button(label="clear cache", tag="_button_clear_cache", callback=callback_clear_cache)
+                
+            # keyframes
+            with dpg.collapsing_header(label="Record", default_open=True):
+                dpg.add_text("Keyframes")
+                with dpg.group(horizontal=True):
+                    # list keyframes
+                    def callback_set_current_keyframe(sender, app_data):
+                        idx = int(dpg.get_value("_listbox_keyframes"))
+                        self.apply_state_dict(self.keyframes[idx])
 
-                with dpg.collapsing_header(label="Camera Pose", default_open=False):
-                    dpg.add_text(str(self.cam.pose.astype(np.float16)), tag="_log_pose")
-            
-                dpg.add_separator()
+                        record_timestep = sum([keyframe['interval'] for keyframe in self.keyframes[:idx]])
+                        dpg.set_value("_slider_record_timestep", record_timestep)
+
+                        self.need_update = True
+                    dpg.add_listbox(self.keyframes, width=200, tag="_listbox_keyframes", callback=callback_set_current_keyframe)
+
+                    # edit keyframes
+                    with dpg.group():
+                        # add
+                        def callback_add_keyframe(sender, app_data):
+                            if len(self.keyframes) == 0:
+                                new_idx = 0
+                            else:
+                                new_idx = int(dpg.get_value("_listbox_keyframes")) + 1
+
+                            states = self.get_state_dict()
+                            
+                            self.keyframes.insert(new_idx, states)
+                            dpg.configure_item("_listbox_keyframes", items=list(range(len(self.keyframes))))
+                            dpg.set_value("_listbox_keyframes", new_idx)
+
+                            self.update_record_timeline()
+                        dpg.add_button(label="add", tag="_button_add_keyframe", callback=callback_add_keyframe)
+
+                        # delete
+                        def callback_delete_keyframe(sender, app_data):
+                            idx = int(dpg.get_value("_listbox_keyframes"))
+                            self.keyframes.pop(idx)
+                            dpg.configure_item("_listbox_keyframes", items=list(range(len(self.keyframes))))
+                            dpg.set_value("_listbox_keyframes", idx-1)
+
+                            self.update_record_timeline()
+                        dpg.add_button(label="delete", tag="_button_delete_keyframe", callback=callback_delete_keyframe)
+
+                        # update
+                        def callback_update_keyframe(sender, app_data):
+                            if len(self.keyframes) == 0:
+                                return
+                            else:
+                                idx = int(dpg.get_value("_listbox_keyframes"))
+
+                            states = self.get_state_dict()
+                            states['interval'] = self.cfg.fps*self.cfg.keyframe_interval
+
+                            self.keyframes[idx] = states
+                        dpg.add_button(label="update", tag="_button_update_keyframe", callback=callback_update_keyframe)
+
+                def callback_set_update_cycles(sender, app_data):
+                    self.update_record_timeline()
+                dpg.add_input_int(label="cycles", tag="_input_cycles", default_value=0, width=100, callback=callback_set_update_cycles)
+                
+                def callback_set_record_timestep(sender, app_data):
+                    state_dict = self.get_state_dict_record()
+                    
+                    self.apply_state_dict(state_dict)
+                    self.need_update = True
+                dpg.add_slider_int(label="timeline", tag='_slider_record_timestep', width=200, min_value=0, max_value=0, format="%d", default_value=0, callback=callback_set_record_timestep)
+                
+                with dpg.group(horizontal=True):
+                    dpg.add_checkbox(label="dynamic", default_value=False, tag="_checkbox_dynamic_record")
+                
+                with dpg.group(horizontal=True):
+                    def callback_play(sender, app_data):
+                        self.playing = not self.playing
+                        self.need_update = True
+                    dpg.add_button(label="play", tag="_button_play", callback=callback_play)
+
+                    def callback_export_trajectory(sender, app_data):
+                        self.export_trajectory()
+                    dpg.add_button(label="export traj", tag="_button_export_traj", callback=callback_export_trajectory)
+                
                 def callback_save_image(sender, app_data):
                     if not self.cfg.save_folder.exists():
                         self.cfg.save_folder.mkdir(parents=True)
@@ -298,7 +563,7 @@ class GaussianSplattingViewer:
                 self.need_update = True
                 if self.debug:
                     dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
-            else:
+            elif dpg.is_item_hovered("_slider_timestep"):
                 self.timestep = min(max(self.timestep - delta, 0), self.num_timesteps - 1)
                 dpg.set_value("_slider_timestep", self.timestep)
                 self.gaussians.select_mesh_by_timestep(self.timestep)
@@ -394,12 +659,18 @@ class GaussianSplattingViewer:
         
         while dpg.is_dearpygui_running():
 
-            if self.need_update:
+            if self.need_update or self.playing:
                 self.rendering = True
                 cam = self.prepare_camera()
 
                 if self.show_spatting:
+                    # rgb
                     rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, torch.tensor(self.cfg.background_color).cuda(), scaling_modifier=self.scaling_modifier)["render"].permute(1, 2, 0).contiguous()
+
+                    # opacity
+                    # override_color = torch.ones_like(self.gaussians._xyz).cuda()
+                    # background_color = torch.tensor(self.cfg.background_color).cuda() * 0
+                    # rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, background_color, scaling_modifier=self.scaling_modifier, override_color=override_color)["render"].permute(1, 2, 0).contiguous()
 
                 if self.gaussians.binding != None and self.show_mesh:
                     out_dict = mesh_renderer.render_from_camera(self.gaussians.verts, faces, cam)
@@ -425,6 +696,22 @@ class GaussianSplattingViewer:
                 self.refresh()
                 self.rendering = False
                 self.need_update = False
+
+                if self.playing:
+                    record_timestep = dpg.get_value("_slider_record_timestep")
+                    if record_timestep >= self.num_record_timeline - 1:
+                        self.playing = False
+                        dpg.set_value("_slider_record_timestep", 0)
+                    else:
+                        dpg.set_value("_slider_record_timestep", record_timestep + 1)
+                        if dpg.get_value("_checkbox_dynamic_record"):
+                            self.timestep = min(self.timestep + 1, self.num_timesteps - 1)
+                            dpg.set_value("_slider_timestep", self.timestep)
+                            self.gaussians.select_mesh_by_timestep(self.timestep)
+
+                        state_dict = self.get_state_dict_record()
+                        self.apply_state_dict(state_dict)
+
             dpg.render_dearpygui_frame()
 
 
