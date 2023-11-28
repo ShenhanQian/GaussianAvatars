@@ -55,6 +55,8 @@ class Config:
     """default keyframe interval"""
     ref_json: Optional[Path] = None
     """Path to the reference json file. We use this file to complement the exported trajectory json file."""
+    demo_mode: bool = False
+    """The UI will be simplified in demo mode."""
 
 class GaussianSplattingViewer:
     def __init__(self, cfg: Config):
@@ -69,7 +71,6 @@ class GaussianSplattingViewer:
         self.last_time_fresh = None
         self.render_buffer = np.ones((self.W, self.H, 3), dtype=np.float32)
         self.need_update = True  # camera moved, should reset accumulation
-        self.debug = True
 
         # buffers for mouse interaction
         self.cursor_x = None
@@ -332,8 +333,8 @@ class GaussianSplattingViewer:
         with dpg.window(label="Render", tag="_render_window", autosize=True):
 
             with dpg.group(horizontal=True):
-                dpg.add_text("FPS: ")
-                dpg.add_text("", tag="_log_fps")
+                dpg.add_text("FPS: ", show=not self.cfg.demo_mode)
+                dpg.add_text("", tag="_log_fps", show=not self.cfg.demo_mode)
 
             # # render_mode combo
             # def callback_change_mode(sender, app_data):
@@ -394,7 +395,7 @@ class GaussianSplattingViewer:
             def callback_change_mesh_color(sender, app_data):
                 self.mesh_color = torch.tensor(app_data, dtype=torch.float32)  # only need RGB in [0, 1]
                 self.need_update = True
-            dpg.add_color_edit((self.mesh_color*255).tolist(), label="Mesh Color", width=200, callback=callback_change_mesh_color)
+            dpg.add_color_edit((self.mesh_color*255).tolist(), label="Mesh Color", width=200, callback=callback_change_mesh_color, show=not self.cfg.demo_mode)
 
             # # bg_color picker
             # def callback_change_bg(sender, app_data):
@@ -418,29 +419,23 @@ class GaussianSplattingViewer:
             def callback_set_fovy(sender, app_data):
                 self.cam.fovy = app_data
                 self.need_update = True
-            dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, width=200, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy")
+            dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, width=200, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy", show=not self.cfg.demo_mode)
 
             # camera
-            if self.debug:
-                with dpg.collapsing_header(label="Camera Pose", default_open=False):
-                    dpg.add_text(str(self.cam.pose.astype(np.float16)), tag="_log_pose")
-            
             with dpg.group(horizontal=True):
                 def callback_reset_camera(sender, app_data):
                     self.cam.reset()
                     self.need_update = True
-                    if self.debug:
-                        dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
                     dpg.set_value("_slider_fovy", self.cam.fovy)
-                dpg.add_button(label="reset camera", tag="_button_reset_pose", callback=callback_reset_camera)
+                dpg.add_button(label="reset camera", tag="_button_reset_pose", callback=callback_reset_camera, show=not self.cfg.demo_mode)
                 
                 def callback_cache_camera(sender, app_data):
                     self.cam.save()
-                dpg.add_button(label="cache camera", tag="_button_cache_pose", callback=callback_cache_camera)
+                dpg.add_button(label="cache camera", tag="_button_cache_pose", callback=callback_cache_camera, show=not self.cfg.demo_mode)
 
                 def callback_clear_cache(sender, app_data):
                     self.cam.clear()
-                dpg.add_button(label="clear cache", tag="_button_clear_cache", callback=callback_clear_cache)
+                dpg.add_button(label="clear cache", tag="_button_clear_cache", callback=callback_clear_cache, show=not self.cfg.demo_mode)
                 
         # window: recording ==================================================================================================
         with dpg.window(label="Record", tag="_record_window", autosize=True):
@@ -619,9 +614,6 @@ class GaussianSplattingViewer:
                     self.cam.pan(dx, dy)
                     self.need_update = True
 
-            if self.debug:
-                dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
-
         def callback_mouse_button_down(sender, app_data):
             if not dpg.is_item_focused("_canvas_window"):
                 return
@@ -665,8 +657,6 @@ class GaussianSplattingViewer:
             if dpg.is_item_focused("_canvas_window"):
                 self.cam.scale(delta)
                 self.need_update = True
-                if self.debug:
-                    dpg.set_value("_log_pose", str(self.cam.pose.astype(np.float16)))
             elif dpg.is_item_hovered("_slider_timestep"):
                 self.timestep = min(max(self.timestep - delta, 0), self.num_timesteps - 1)
                 dpg.set_value("_slider_timestep", self.timestep)
