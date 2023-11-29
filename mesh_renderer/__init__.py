@@ -3,7 +3,7 @@ import nvdiffrast.torch as dr
 import torch
 import torch.nn.functional as F
 import numpy as np
-from vht.util import vector_ops as V
+from utils import vector_ops as V
 from scene.cameras import MiniCam
 
 
