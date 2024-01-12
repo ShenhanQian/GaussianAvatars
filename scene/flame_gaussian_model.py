@@ -1,7 +1,8 @@
 from pathlib import Path
 import numpy as np
 import torch
-from vht.model.flame import FlameHead
+# from vht.model.flame import FlameHead
+from flame_model.flame import FlameHead
 
 from .gaussian_model import GaussianModel
 from utils.graphics_utils import compute_face_orientation
