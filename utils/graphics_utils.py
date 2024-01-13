@@ -76,6 +76,17 @@ def fov2focal(fov, pixels):
 def focal2fov(focal, pixels):
     return 2*math.atan(pixels/(2*focal))
 
+
+# Copyright (c) 2020-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved. 
+#
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction, 
+# disclosure or distribution of this material and related documentation 
+# without an express license agreement from NVIDIA CORPORATION or 
+# its affiliates is strictly prohibited.
+
+
 def dot(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     return torch.sum(x*y, -1, keepdim=True)
 

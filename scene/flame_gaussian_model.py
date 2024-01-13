@@ -6,7 +6,8 @@ from flame_model.flame import FlameHead
 
 from .gaussian_model import GaussianModel
 from utils.graphics_utils import compute_face_orientation
-from pytorch3d.transforms import matrix_to_quaternion
+# from pytorch3d.transforms import matrix_to_quaternion
+from roma import rotmat_to_unitquat, quat_xyzw_to_wxyz
 
 
 class FlameGaussianModel(GaussianModel):
@@ -60,8 +61,6 @@ class FlameGaussianModel(GaussianModel):
                 'static_offset': static_offset,
                 'dynamic_offset': torch.zeros([T, num_verts, 3]),
             }
-            if self.flame_model.has_neck_base_joint:
-                self.flame_param['neck_base_pose'] = torch.zeros([T, 3])
 
             for i, mesh in pose_meshes.items():
                 self.flame_param['expr'][i] = torch.from_numpy(mesh['expr'])
@@ -71,8 +70,6 @@ class FlameGaussianModel(GaussianModel):
                 self.flame_param['eyes_pose'][i] = torch.from_numpy(mesh['eyes_pose'])
                 self.flame_param['translation'][i] = torch.from_numpy(mesh['translation'])
                 # self.flame_param['dynamic_offset'][i] = torch.from_numpy(mesh['dynamic_offset'])
-                if 'neck_base_pose' in mesh:
-                    self.flame_param['neck_base_pose'][i] = torch.from_numpy(mesh['neck_base_pose'])
             
             for k, v in self.flame_param.items():
                 self.flame_param[k] = v.float().cuda()
@@ -113,11 +110,6 @@ class FlameGaussianModel(GaussianModel):
         self.timestep = timestep
         flame_param = self.flame_param_orig if original and self.flame_param_orig != None else self.flame_param
 
-        if self.flame_model.has_neck_base_joint and 'neck_base_pose' in flame_param:
-            neck_base = flame_param['neck_base_pose'][[timestep]]
-        else:
-            neck_base = None
-
         verts, verts_cano = self.flame_model(
             flame_param['shape'][None, ...],
             flame_param['expr'][[timestep]],
@@ -131,7 +123,6 @@ class FlameGaussianModel(GaussianModel):
             return_verts_cano=True,
             static_offset=flame_param['static_offset'],
             dynamic_offset=flame_param['dynamic_offset'][[timestep]],
-            neck_base=neck_base,
         )
         self.update_mesh_properties(verts, verts_cano)
     
@@ -144,7 +135,8 @@ class FlameGaussianModel(GaussianModel):
 
         # orientation and scale
         self.face_orien_mat, self.face_scaling = compute_face_orientation(verts.squeeze(0), faces.squeeze(0), return_scale=True)
-        self.face_orien_quat = matrix_to_quaternion(self.face_orien_mat)
+        # self.face_orien_quat = matrix_to_quaternion(self.face_orien_mat)  # pytorch3d (WXYZ)
+        self.face_orien_quat = quat_xyzw_to_wxyz(rotmat_to_unitquat(self.face_orien_mat))  # roma
 
         # for mesh rendering
         self.verts = verts
@@ -193,9 +185,6 @@ class FlameGaussianModel(GaussianModel):
             self.flame_param['jaw_pose'],
             self.flame_param['eyes_pose'],
         ]
-        if self.flame_model.has_neck_base_joint:
-            self.flame_param['neck_base_pose'].requires_grad = True
-            params.append(self.flame_param['neck_base_pose'])
         param_pose = {'params': params, 'lr': training_args.flame_pose_lr, "name": "pose"}
         self.optimizer.add_param_group(param_pose)
 

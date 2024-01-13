@@ -17,7 +17,8 @@ from torch import nn
 import os
 from utils.system_utils import mkdir_p
 from plyfile import PlyData, PlyElement
-from pytorch3d.transforms import quaternion_multiply
+# from pytorch3d.transforms import quaternion_multiply
+from roma import quat_product, quat_xyzw_to_wxyz, quat_wxyz_to_xyzw
 from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
@@ -130,7 +131,8 @@ class GaussianModel:
             # always need to normalize the rotation quaternions before chaining them
             rot = self.rotation_activation(self._rotation)
             face_orien_quat = self.rotation_activation(self.face_orien_quat[self.binding])
-            return quaternion_multiply(rot, face_orien_quat)
+            return quat_xyzw_to_wxyz(quat_product(quat_wxyz_to_xyzw(rot), quat_wxyz_to_xyzw(face_orien_quat)))  # roma
+            # return quaternion_multiply(rot, face_orien_quat)  # pytorch3d
     
     @property
     def get_xyz(self):
