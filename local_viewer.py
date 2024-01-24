@@ -37,9 +37,9 @@ class Config:
     """Spherical Harmonics degree"""
     render_mode: Literal['rgb', 'depth', 'opacity'] = 'rgb'
     """NeRF rendering mode"""
-    W: int = 1280
+    W: int = 960
     """GUI width"""
-    H: int = 960
+    H: int = 540
     """GUI height"""
     radius: float = 1
     """default GUI camera radius from center"""
@@ -708,7 +708,7 @@ class GaussianSplattingViewer:
         dpg.bind_item_theme("_canvas_window", theme_no_padding)
 
         ### finish setup ==================================================================================================
-        dpg.create_viewport(title='Gaussian Splatting Viewer - Local', width=self.W, height=self.H, resizable=True)
+        dpg.create_viewport(title='GaussianAvatars - Local Viewer', width=self.W, height=self.H, resizable=True)
         dpg.setup_dearpygui()
         dpg.show_viewport()
 

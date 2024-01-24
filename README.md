@@ -63,10 +63,10 @@ Please download the pre-processed data and decompress into `data/`.
 
 Our code and the pre-processed data relies on FLAME 2023. Downloaded assets from https://flame.is.tue.mpg.de/download.php and store them in below paths:
 
-- `assets/flame/flame2023.pkl`  # FLAME 2023 (versions w/ jaw rotation)
-- `assets/flame/FLAME_masks.pkl`  # FLAME Vertex Masks
+- `flame_model/assets/flame/flame2023.pkl`  # FLAME 2023 (versions w/ jaw rotation)
+- `flame_model/assets/flame/FLAME_masks.pkl`  # FLAME Vertex Masks
 
-> It is possible to run our method with FLAME 2020 by download to `assets/flame/generic_model.pkl`. The `FLAME_MODEL_PATH` in `flame_model/flame.py` needs to be updated accordingly. And the FLAME tracking results should also be based on FLAME 2020 in this case.
+> It is possible to run our method with FLAME 2020 by download to `flame_model/assets/flamegeneric_model.pkl`. The `FLAME_MODEL_PATH` in `flame_model/flame.py` needs to be updated accordingly. And the FLAME tracking results should also be based on FLAME 2020 in this case.
 
 ### Running
 
@@ -255,6 +255,9 @@ During training, one can monitor the training progress with the remote viewer
 python remote_viewer.py --port 60000
 ```
 
+![remote viewer](assets/remote_viewer.png)
+
+
 ### Running the Local Viewer
 After training, one can load and render the optimized 3D Gaussians with the local viewer
 ```shell
@@ -262,6 +265,19 @@ export SUBJECT=306
 python local_viewer.py \
 --point_path output/UNION10EMOEXP_${SUBJECT}_eval_600k
 ```
+
+<details>
+<summary><span style="font-weight: bold;">Command Line Arguments for local_viewer.py</span></summary>
+
+  #### --point_path
+  Path to the gaussian splatting file (ply)
+  #### --motion_path
+  Path to the motion file (npz)
+
+</details>
+
+![local viewer](assets/local_viewer.png)
+
 
 ## Acknowledgment
 

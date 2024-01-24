@@ -368,17 +368,17 @@ class RemoteViewer:
         #             self.need_update = True
         #         dpg.add_color_edit((self.bg_color*255).tolist(), label="Background Color", width=200, no_alpha=True, callback=callback_change_bg)
 
-                # near slider
-                def callback_set_znear(sender, app_data):
-                    self.cam.znear = app_data
-                    self.need_update = True
-                dpg.add_slider_float(label="near", width=155, min_value=0, max_value=2, format="%.5f", default_value=self.cam.znear, callback=callback_set_znear, tag="_slider_near")
+                # # near slider
+                # def callback_set_znear(sender, app_data):
+                #     self.cam.znear = app_data
+                #     self.need_update = True
+                # dpg.add_slider_float(label="near", width=155, min_value=0, max_value=2, format="%.5f", default_value=self.cam.znear, callback=callback_set_znear, tag="_slider_near")
 
-                # far slider
-                def callback_set_far(sender, app_data):
-                    self.cam.zfar = app_data
-                    self.need_update = True
-                dpg.add_slider_float(label="far", width=155, min_value=1e-3, max_value=2, format="%.5f", default_value=self.cam.zfar, callback=callback_set_far, tag="_slider_far")
+                # # far slider
+                # def callback_set_far(sender, app_data):
+                #     self.cam.zfar = app_data
+                #     self.need_update = True
+                # dpg.add_slider_float(label="far", width=155, min_value=1e-3, max_value=2, format="%.5f", default_value=self.cam.zfar, callback=callback_set_far, tag="_slider_far")
 
                 # fov slider
                 def callback_set_fovy(sender, app_data):
@@ -497,7 +497,7 @@ class RemoteViewer:
             dpg.add_key_press_handler(dpg.mvKey_Home, callback=callback_set_current_frame, tag='_mvKey_Home')
             dpg.add_key_press_handler(dpg.mvKey_End, callback=callback_set_current_frame, tag='_mvKey_End')
 
-        dpg.create_viewport(title='Gaussian Splatting Viewer - Remote', width=self.W, height=self.H, resizable=True)
+        dpg.create_viewport(title='GaussianAvatars - Remote Viewer', width=self.W, height=self.H, resizable=True)
 
         def callback_resize(sender, app_data):
             self.W = app_data[0]
