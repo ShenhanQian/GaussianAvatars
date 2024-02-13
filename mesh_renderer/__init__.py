@@ -178,14 +178,14 @@ class NVDiffRenderer(torch.nn.Module):
         """
         Renders meshes into RGBA images
         """
-        world_view_transform = cam.world_view_transform.clone()
+        world_view_transform = cam.world_view_transform.clone().to(verts)
         world_view_transform[:,1] = -world_view_transform[:,1]
         world_view_transform[:,2] = -world_view_transform[:,2]
         RT = world_view_transform.T[None, ...]
         
         full_proj_transform = cam.full_proj_transform.clone()
         full_proj_transform[:,1] = -full_proj_transform[:,1]
-        full_proj = full_proj_transform.T[None, ...]
+        full_proj = full_proj_transform.T[None, ...].to(verts)
 
         if self.use_opengl:
             image_size = cam.image_height, cam.image_width

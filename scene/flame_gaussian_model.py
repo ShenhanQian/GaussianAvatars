@@ -219,6 +219,8 @@ class FlameGaussianModel(GaussianModel):
         super().load_ply(path)
 
         if not kwargs['has_target']:
+            # When there is no target motion specified, use the finetuned FLAME parameters.
+            # This operation overwrites the FLAME parameters loaded from the dataset.
             npz_path = Path(path).parent / "flame_param.npz"
             flame_param = np.load(str(npz_path))
             flame_param = {k: torch.from_numpy(v).cuda() for k, v in flame_param.items()}
@@ -227,6 +229,7 @@ class FlameGaussianModel(GaussianModel):
             self.num_timesteps = self.flame_param['expr'].shape[0]  # required by viewers
         
         if 'motion_path' in kwargs and kwargs['motion_path'] is not None:
+            # When there is a motion sequence specified, load only dynamic parameters.
             motion_path = Path(kwargs['motion_path'])
             flame_param = np.load(str(motion_path))
             flame_param = {k: torch.from_numpy(v).cuda() for k, v in flame_param.items() if v.dtype == np.float32}

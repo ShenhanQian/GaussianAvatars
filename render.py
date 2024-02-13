@@ -27,7 +27,10 @@ from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel, FlameGaussianModel
+from mesh_renderer import NVDiffRenderer
 
+
+mesh_renderer = NVDiffRenderer()
 
 def write_data(path2data):
     for path, data in path2data.items():
@@ -48,12 +51,14 @@ def write_data(path2data):
         else:
             raise NotImplementedError(f"Unknown file type: {path.suffix}")
 
-def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipeline, background):
+def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipeline, background, render_mesh):
     if dataset.select_camera_id != -1:
         name = f"{name}_{dataset.select_camera_id}"
     iter_path = Path(dataset.model_path) / name / f"ours_{iteration}"
     render_path = iter_path / "renders"
     gts_path = iter_path / "gt"
+    if render_mesh:
+        render_mesh_path = iter_path / "renders_mesh"
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
@@ -67,10 +72,19 @@ def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipelin
             gaussians.select_mesh_by_timestep(view.timestep)
         rendering = render(view, gaussians, pipeline, background)["render"]
         gt = view.original_image[0:3, :, :]
+        if render_mesh:
+            out_dict = mesh_renderer.render_from_camera(gaussians.verts, gaussians.faces, view)
+            rgba_mesh = out_dict['rgba'].squeeze(0).permute(2, 0, 1)  # (C, W, H)
+            rgb_mesh = rgba_mesh[:3, :, :]
+            alpha_mesh = rgba_mesh[3:, :, :]
+            mesh_opacity = 0.5
+            rendering_mesh = rgb_mesh * alpha_mesh * mesh_opacity  + gt.to(rgb_mesh) * (alpha_mesh * (1 - mesh_opacity) + (1 - alpha_mesh))
 
         path2data = {}
         path2data[Path(render_path) / f'{idx:05d}.png'] = rendering
         path2data[Path(gts_path) / f'{idx:05d}.png'] = gt
+        if render_mesh:
+            path2data[Path(render_mesh_path) / f'{idx:05d}.png'] = rendering_mesh
         worker_args.append([path2data])
 
         if len(worker_args) == max_threads or idx == len(views_loader)-1:
@@ -82,10 +96,12 @@ def render_set(dataset : ModelParams, name, iteration, views, gaussians, pipelin
     try:
         os.system(f"ffmpeg -y -framerate 25 -f image2 -pattern_type glob -i '{render_path}/*.png' -pix_fmt yuv420p {iter_path}/renders.mp4")
         os.system(f"ffmpeg -y -framerate 25 -f image2 -pattern_type glob -i '{gts_path}/*.png' -pix_fmt yuv420p {iter_path}/gt.mp4")
+        if render_mesh:
+            os.system(f"ffmpeg -y -framerate 25 -f image2 -pattern_type glob -i '{render_mesh_path}/*.png' -pix_fmt yuv420p {iter_path}/renders_mesh.mp4")
     except Exception as e:
         print(e)
 
-def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_val : bool, skip_test : bool):
+def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_val : bool, skip_test : bool, render_mesh: bool):
     with torch.no_grad():
         if dataset.bind_to_mesh:
             # gaussians = FlameGaussianModel(dataset.sh_degree, dataset.disable_flame_static_offset)
@@ -100,16 +116,16 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         if dataset.target_path != "":
              name = os.path.basename(os.path.normpath(dataset.target_path))
              # when loading from a target path, test cameras are merged into the train cameras
-             render_set(dataset, f'{name}', scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background)
+             render_set(dataset, f'{name}', scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, render_mesh)
         else:
             if not skip_train:
-                render_set(dataset, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background)
+                render_set(dataset, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, render_mesh)
             
             if not skip_val:
-                render_set(dataset, "val", scene.loaded_iter, scene.getValCameras(), gaussians, pipeline, background)
+                render_set(dataset, "val", scene.loaded_iter, scene.getValCameras(), gaussians, pipeline, background, render_mesh)
 
             if not skip_test:
-                render_set(dataset, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
+                render_set(dataset, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, render_mesh)
 
 if __name__ == "__main__":
     # Set up command line argument parser
@@ -121,10 +137,11 @@ if __name__ == "__main__":
     parser.add_argument("--skip_val", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--render_mesh", action="store_true")
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_val, args.skip_test)
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_val, args.skip_test, args.render_mesh)
