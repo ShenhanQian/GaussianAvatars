@@ -73,8 +73,7 @@ Our code and the pre-processed data relies on FLAME 2023. Downloaded assets from
 To run the optimizer, simply use
 
 ```shell
-export SUBJECT=306
-python train.py \
+SUBJECT=306 && python train.py \
 -s data/UNION10_${SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
 --port 60000 --eval --white_background --bind_to_mesh
@@ -167,16 +166,14 @@ python render.py -m <path to trained model> # Generate renderings
 Only render the validation set:
 
 ```shell
-export SUBJECT=306
-python render.py \
+SUBJECT=306 && python render.py \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
 --skip_train --skip_test
 ```
 
 Only render the test set (and only render in the a front view):
 ```shell
-export SUBJECT=306
-python render.py \
+SUBJECT=306 && python render.py \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
 --skip_train --skip_val
 --select_camera_id 8  # front view
@@ -184,9 +181,7 @@ python render.py \
 
 Reenactment (and only render in the a front view):
 ```shell
-export TGT_SUBJECT=218
-export SUBJECT=306
-python render.py \
+TGT_SUBJECT=218 && SUBJECT=306 && python render.py \
 -t data/UNION10_${TGT_SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
 --select_camera_id 8  # front view
@@ -261,8 +256,7 @@ python remote_viewer.py --port 60000
 ### Running the Local Viewer
 After training, one can load and render the optimized 3D Gaussians with the local viewer
 ```shell
-export SUBJECT=306
-python local_viewer.py \
+SUBJECT=306 && python local_viewer.py \
 --point_path output/UNION10EMOEXP_${SUBJECT}_eval_600k
 ```
 
