@@ -4,6 +4,20 @@
 
 [project](https://shenhanqian.github.io/gaussian-avatars) / [arxiv](http://arxiv.org/abs/2312.02069) / [video](https://www.youtube.com/watch?v=lVEY78RwU_I) / [bibtex](https://shenhanqian.github.io/raw.html?filePath=/assets/2023-12-04-gaussian-avatars/bibtex.bib)
 
+## Licenses
+
+Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual 
+property and proprietary rights in and to this software, related documentation 
+and any modifications thereto. Any use, reproduction, disclosure or distribution 
+of this software and related documentation without an express license agreement 
+from Toyota Motor Europe NV/SA is strictly prohibited.
+
+This project uses [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting), which carries its [original license](./LICENSE_GS.md).
+The GUI is inspired by [INSTA](https://github.com/Zielon/INSTA). 
+The mesh rendering operations are adapted from [NVDiffRec](https://github.com/NVlabs/nvdiffrec) and [NVDiffRast](https://github.com/NVlabs/nvdiffrast). 
+
+This work is made available under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](./LICENSE.md).
+
 ### Hardware Requirements
 
 - CUDA-ready GPU with Compute Capability 7.0+
@@ -271,21 +285,6 @@ SUBJECT=306 && python local_viewer.py \
 </details>
 
 ![local viewer](assets/local_viewer.png)
-
-
-## Licenses
-
-Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual 
-property and proprietary rights in and to this software, related documentation 
-and any modifications thereto. Any use, reproduction, disclosure or distribution 
-of this software and related documentation without an express license agreement 
-from Toyota Motor Europe NV/SA is strictly prohibited.
-
-This project uses [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting), which carries its [original license](./LICENSE_GS.md).
-The GUI is inspired by [INSTA](https://github.com/Zielon/INSTA). 
-The mesh rendering operations are adapted from [NVDiffRec](https://github.com/NVlabs/nvdiffrec) and [NVDiffRast](https://github.com/NVlabs/nvdiffrast). 
-
-This work is made available under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](./LICENSE.md).
 
 ## Cite
 
