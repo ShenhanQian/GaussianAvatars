@@ -18,6 +18,8 @@ The mesh rendering operations are adapted from [NVDiffRec](https://github.com/NV
 
 This work is made available under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](./LICENSE.md).
 
+## Setup
+
 ### Hardware Requirements
 
 - CUDA-ready GPU with Compute Capability 7.0+
@@ -37,8 +39,6 @@ This work is made available under [Creative Commons Attribution-NonCommercial-Sh
 - PyTorch3D (for mesh loading and optionally rotation representations)
 - DearPyGUI (for viewer interface)
 - NVDiffRast (for mesh rendering in viewer)
-
-## Setup
 
 ### Environment
 
@@ -82,7 +82,8 @@ Our code and the pre-processed data relies on FLAME 2023. Downloaded assets from
 
 > It is possible to run our method with FLAME 2020 by download to `flame_model/assets/flamegeneric_model.pkl`. The `FLAME_MODEL_PATH` in `flame_model/flame.py` needs to be updated accordingly. And the FLAME tracking results should also be based on FLAME 2020 in this case.
 
-### Running
+## Running
+### Training
 
 To run the optimizer, simply use
 
