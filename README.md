@@ -7,8 +7,8 @@
 ## Licenses
 
 Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual 
-property and proprietary rights in and to this software, related documentation 
-and any modifications thereto. Any use, reproduction, disclosure or distribution 
+property and proprietary rights in and to this software and related documentation. 
+Any commercial use, reproduction, disclosure or distribution 
 of this software and related documentation without an express license agreement 
 from Toyota Motor Europe NV/SA is strictly prohibited.
 
@@ -267,6 +267,8 @@ python remote_viewer.py --port 60000
 
 ![remote viewer](assets/remote_viewer.png)
 
+> - The remote viewer can slow down training a lot. You may want to close it or check "pause rendering" when not viewing.
+> - The viewer could get frozen and disconnected the first time you enable "show mesh". You can try switching it on and off or simply wait for a second.
 
 ### Running the Local Viewer
 After training, one can load and render the optimized 3D Gaussians with the local viewer
