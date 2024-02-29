@@ -23,13 +23,13 @@ This work is made available under [Creative Commons Attribution-NonCommercial-Sh
 ### Hardware Requirements
 
 - CUDA-ready GPU with Compute Capability 7.0+
-- 12 GB VRAM (to train to paper evaluation quality)
+- 11 GB VRAM (we used RTX 2080Ti)
 
 ### Software Requirements
 
 - Conda (recommended for easy setup)
-- C++ Compiler for PyTorch extensions (we used Visual Studio 2019 for Windows, GCC for Linux)
-- CUDA SDK 11 for PyTorch extensions, install *after* Visual Studio or GCC (11.7 tested on Linux)
+- C++ Compiler for PyTorch extensions (we used Visual Studio 2019/2022 for Windows, GCC for Linux)
+- CUDA SDK for PyTorch extensions, install *after* Visual Studio or GCC
 - C++ Compiler and CUDA SDK must be compatible
 - FFMPEG to create result videos
 
@@ -41,6 +41,7 @@ This work is made available under [Creative Commons Attribution-NonCommercial-Sh
 - NVDiffRast (for mesh rendering in viewer)
 
 ### Tested Platforms
+
 | PyTorch Version | CUDA version | Linux | Windows |
 |-| - | - | - |
 | 2.0.1 | 11.7.1 | Pass | Failed to compile PyTorch3D |
@@ -102,7 +103,9 @@ Our code and the pre-processed data relies on FLAME 2023. Downloaded assets from
 To run the optimizer, simply use
 
 ```shell
-SUBJECT=306 && python train.py \
+SUBJECT=306
+
+python train.py \
 -s data/UNION10_${SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
 --port 60000 --eval --white_background --bind_to_mesh
@@ -195,22 +198,29 @@ python render.py -m <path to trained model> # Generate renderings
 Only render the validation set:
 
 ```shell
-SUBJECT=306 && python render.py \
+SUBJECT=306
+
+python render.py \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
 --skip_train --skip_test
 ```
 
-Only render the test set (and only render in the a front view):
+Only render the test set (and only in a front view):
 ```shell
-SUBJECT=306 && python render.py \
+SUBJECT=306
+
+python render.py \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
---skip_train --skip_val
+--skip_train --skip_val \
 --select_camera_id 8  # front view
 ```
 
-Reenactment (and only render in the a front view):
+Reenactment (only in a front view):
 ```shell
-TGT_SUBJECT=218 && SUBJECT=306 && python render.py \
+SUBJECT=306
+TGT_SUBJECT=218
+
+python render.py \
 -t data/UNION10_${TGT_SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
 --select_camera_id 8  # front view
@@ -287,8 +297,11 @@ python remote_viewer.py --port 60000
 ### Running the Local Viewer
 After training, one can load and render the optimized 3D Gaussians with the local viewer
 ```shell
-SUBJECT=306 && python local_viewer.py \
---point_path output/UNION10EMOEXP_${SUBJECT}_eval_600k
+SUBJECT=306
+ITER=300000
+
+python local_viewer.py \
+--point_path output/UNION10EMOEXP_${SUBJECT}_eval_600k/point_cloud/iteration_${ITER}/point_cloud.ply
 ```
 
 <details>
