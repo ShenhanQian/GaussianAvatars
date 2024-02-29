@@ -146,7 +146,7 @@ class NVDiffRenderer(torch.nn.Module):
         v0 = verts[..., i0, :]
         v1 = verts[..., i1, :]
         v2 = verts[..., i2, :]
-        face_normals = torch.cross(v1 - v0, v2 - v0)
+        face_normals = torch.cross(v1 - v0, v2 - v0, dim=-1)
         face_normals = V.safe_normalize(face_normals)
         return face_normals
     
@@ -158,7 +158,7 @@ class NVDiffRenderer(torch.nn.Module):
         v0 = verts[..., i0, :]
         v1 = verts[..., i1, :]
         v2 = verts[..., i2, :]
-        face_normals = torch.cross(v1 - v0, v2 - v0)
+        face_normals = torch.cross(v1 - v0, v2 - v0, dim=-1)
         v_normals = torch.zeros_like(verts)
         N = verts.shape[0]
         v_normals.scatter_add_(1, i0[..., None].repeat(N, 1, 3), face_normals)

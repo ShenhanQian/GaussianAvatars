@@ -29,7 +29,7 @@ This work is made available under [Creative Commons Attribution-NonCommercial-Sh
 
 - Conda (recommended for easy setup)
 - C++ Compiler for PyTorch extensions (we used Visual Studio 2019 for Windows, GCC for Linux)
-- CUDA SDK 11 for PyTorch extensions, install *after* Visual Studio or GCC (we used 11.7, **known issues with 11.6**)
+- CUDA SDK 11 for PyTorch extensions, install *after* Visual Studio or GCC (11.7 tested on Linux)
 - C++ Compiler and CUDA SDK must be compatible
 - FFMPEG to create result videos
 
@@ -40,25 +40,39 @@ This work is made available under [Creative Commons Attribution-NonCommercial-Sh
 - DearPyGUI (for viewer interface)
 - NVDiffRast (for mesh rendering in viewer)
 
+### Tested Platforms
+| PyTorch Version | CUDA version | Linux | Windows |
+|-| - | - | - |
+| 2.0.1 | 11.7.1 | Pass | Failed to compile PyTorch3D |
+| 2.2.0 | 12.1.1 | Pass | Pass |
+
 ### Environment
 
 Our default installation method is based on Conda package and environment management:
 
 ```shell
-SET DISTUTILS_USE_SDK=1 # Windows only
-
 git clone https://github.com/ShenhanQian/GaussianAvatars.git --recursive
 cd GaussianAvatars
 
 conda create --name gaussian-avatars -y python=3.10
 conda activate gaussian-avatars
 
-conda install ninja
-conda install -c "nvidia/label/cuda-11.7.1" cuda-toolkit
+# Install CUDA and ninja for compilation
+conda install -c "nvidia/label/cuda-11.7.1" cuda-toolkit ninja  # use the right CUDA version
+# (Linux only) ----------
 ln -s "$CONDA_PREFIX/lib" "$CONDA_PREFIX/lib64"  # to avoid error "/usr/bin/ld: cannot find -lcudart"
-pip install torch==2.0.1 torchvision==0.15.2  # match CUDA 11.7 by default
+# (Windows only) --------
+conda env config vars set CUDA_PATH="$env:CONDA_PREFIX"  # re-activate the environment to make effective
+# ---------------------
 
-pip install -r requirements.txt  # can take a while for compiling pytorch3d and nvdiffrast
+# Install PyTorch (make sure the CUDA version match with the above)
+pip install torch==2.0.1 torchvision --index-url https://download.pytorch.org/whl/cu117
+# or
+conda install pytorch torchvision pytorch-cuda=11.7 -c pytorch -c nvidia
+# make sure torch.cuda.is_available() returns True
+
+# Install the rest pacakges (can take a while for compiling pytorch3d and nvdiffrast)
+pip install -r requirements.txt
 ```
 
 ### Data

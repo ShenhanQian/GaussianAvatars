@@ -110,7 +110,7 @@ def compute_face_normals(verts, faces):
     v0 = verts[..., i0, :]
     v1 = verts[..., i1, :]
     v2 = verts[..., i2, :]
-    face_normals = torch.cross(v1 - v0, v2 - v0)
+    face_normals = torch.cross(v1 - v0, v2 - v0, dim=-1)
     return face_normals
 
 def compute_face_orientation(verts, faces, return_scale=False):
@@ -123,8 +123,8 @@ def compute_face_orientation(verts, faces, return_scale=False):
     v2 = verts[..., i2, :]
 
     a0 = safe_normalize(v1 - v0)
-    a1 = safe_normalize(torch.cross(a0, v2 - v0))
-    a2 = -safe_normalize(torch.cross(a1, a0))  # will have artifacts without negation
+    a1 = safe_normalize(torch.cross(a0, v2 - v0, dim=-1))
+    a2 = -safe_normalize(torch.cross(a1, a0, dim=-1))  # will have artifacts without negation
 
     orientation = torch.cat([a0[..., None], a1[..., None], a2[..., None]], dim=-1)
 
@@ -142,7 +142,7 @@ def compute_vertex_normals(verts, faces):
     v0 = verts[..., i0, :]
     v1 = verts[..., i1, :]
     v2 = verts[..., i2, :]
-    face_normals = torch.cross(v1 - v0, v2 - v0)
+    face_normals = torch.cross(v1 - v0, v2 - v0, dim=-1)
     v_normals = torch.zeros_like(verts)
     N = verts.shape[0]
     v_normals.scatter_add_(1, i0[..., None].repeat(N, 1, 3), face_normals)
