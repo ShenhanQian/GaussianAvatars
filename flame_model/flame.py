@@ -24,7 +24,10 @@ import torch.nn as nn
 import numpy as np
 import pickle
 from collections import defaultdict
-from pytorch3d.io import load_obj
+try:
+    from pytorch3d.io import load_obj
+except ImportError:
+    from utils.pytorch3d_load_obj import load_obj
 
 FLAME_MESH_PATH = "flame_model/assets/flame/head_template_mesh.obj"
 FLAME_LMK_PATH = "flame_model/assets/flame/landmark_embedding_with_eyes.npy"
@@ -167,7 +170,8 @@ class FlameHead(nn.Module):
 
         self.register_buffer("verts_uvs", aux.verts_uvs, persistent=False)
         self.register_buffer("textures_idx", faces.textures_idx, persistent=False)
-
+        # Check our template mesh faces match those of FLAME:
+        assert (self.faces==torch.from_numpy(flame_model.f.astype('int64'))).all()
         if include_mask:
             self.mask = FlameMask(
                 faces=self.faces, 
