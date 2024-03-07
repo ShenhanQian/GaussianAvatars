@@ -28,23 +28,23 @@ This work is made available under [Creative Commons Attribution-NonCommercial-Sh
 ### Software Requirements
 
 - Conda (recommended for easy setup)
-- C++ Compiler for PyTorch extensions (we used Visual Studio 2019/2022 for Windows, GCC for Linux)
+- C++ Compiler for PyTorch extensions (we used Visual Studio for Windows, GCC for Linux)
 - CUDA SDK for PyTorch extensions, install *after* Visual Studio or GCC
 - C++ Compiler and CUDA SDK must be compatible
 - FFMPEG to create result videos
 
 ### Additional python packages
 
-- RoMa (for rotation representations by default)
+- RoMa (for rotation representations)
 - DearPyGUI (for viewer interface)
 - NVDiffRast (for mesh rendering in viewer)
 
 ### Tested Platforms
 
-| PyTorch Version | CUDA version | Linux | Windows |
-|-| - | - | - |
-| 2.0.1 | 11.7.1 | Pass | Failed to compile PyTorch3D |
-| 2.2.0 | 12.1.1 | Pass | Pass |
+| PyTorch Version | CUDA version | Linux | Windows (VS2022) | Windows (VS2019) |
+|-| - | - | - | - |
+| 2.0.1 | 11.7.1 | Pass | Fail to compile | Pass |
+| 2.2.0 | 12.1.1 | Pass | Pass | Pass |
 
 ### Environment
 
@@ -59,19 +59,36 @@ conda activate gaussian-avatars
 
 # Install CUDA and ninja for compilation
 conda install -c "nvidia/label/cuda-11.7.1" cuda-toolkit ninja  # use the right CUDA version
-# (Linux only) ----------
+
+# ==== for Linux ====
 ln -s "$CONDA_PREFIX/lib" "$CONDA_PREFIX/lib64"  # to avoid error "/usr/bin/ld: cannot find -lcudart"
-# (Windows only) --------
-conda env config vars set CUDA_PATH="$env:CONDA_PREFIX"  # re-activate the environment to make effective
-# ---------------------
+
+# ==== for Windows ====
+## ---- for PowerShell ----
+conda env config vars set CUDA_PATH="$env:CONDA_PREFIX"  
+## Visual Studio 2022 (modify the version number `14.39.33519` accordingly)
+conda env config vars set PATH="$env:CONDA_PREFIX\Script;C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.39.33519\bin\Hostx64\x64;$env:PATH"
+## or Visual Studio 2019 (modify the version number `14.29.30133` accordingly)
+conda env config vars set PATH="$env:CONDA_PREFIX\Script;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.29.30133\bin\HostX86\x86;$env:PATH" 
+## ---- for Command Prompt ----
+conda env config vars set CUDA_PATH=%CONDA_PREFIX%
+## Visual Studio 2022 (modify the version number `14.39.33519` accordingly)
+conda env config vars set PATH="%CONDA_PREFIX%\Script;C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.39.33519\bin\Hostx64\x64;%PATH%"
+## or Visual Studio 2019 (modify the version number `14.29.30133` accordingly)
+conda env config vars set PATH="%CONDA_PREFIX%\Script;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.29.30133\bin\HostX86\x86;%PATH%"
+## --------
+# re-activate the environment to make the above eonvironment variables effective
+conda deactivate
+conda activate gaussian-avatars
+# ========
 
 # Install PyTorch (make sure the CUDA version match with the above)
-pip install torch==2.0.1 torchvision --index-url https://download.pytorch.org/whl/cu117
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu117
 # or
 conda install pytorch torchvision pytorch-cuda=11.7 -c pytorch -c nvidia
 # make sure torch.cuda.is_available() returns True
 
-# Install the rest pacakges (can take a while for compiling nvdiffrast)
+# Install the rest pacakges (can take a while to compile diff-gaussian-rasterization, simple-knn, and nvdiffrast)
 pip install -r requirements.txt
 ```
 
