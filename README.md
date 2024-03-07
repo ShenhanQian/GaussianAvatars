@@ -36,7 +36,6 @@ This work is made available under [Creative Commons Attribution-NonCommercial-Sh
 ### Additional python packages
 
 - RoMa (for rotation representations by default)
-- PyTorch3D (for mesh loading and optionally rotation representations)
 - DearPyGUI (for viewer interface)
 - NVDiffRast (for mesh rendering in viewer)
 
@@ -72,7 +71,7 @@ pip install torch==2.0.1 torchvision --index-url https://download.pytorch.org/wh
 conda install pytorch torchvision pytorch-cuda=11.7 -c pytorch -c nvidia
 # make sure torch.cuda.is_available() returns True
 
-# Install the rest pacakges (can take a while for compiling pytorch3d and nvdiffrast)
+# Install the rest pacakges (can take a while for compiling nvdiffrast)
 pip install -r requirements.txt
 ```
 
