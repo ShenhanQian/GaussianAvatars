@@ -56,9 +56,6 @@ class CameraDataset(torch.utils.data.Dataset):
                 image *= gt_alpha_mask
             
             camera.original_image = image.clamp(0.0, 1.0)
-            camera.image_width = camera.original_image.shape[2]
-            camera.image_height = camera.original_image.shape[1]
-
             return camera
         elif isinstance(idx, slice):
             return CameraDataset(self.cameras[idx])

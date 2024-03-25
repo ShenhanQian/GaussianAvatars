@@ -19,6 +19,7 @@ import torch
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
 from scipy.interpolate import interp1d
+import matplotlib
 
 from utils.viewer_utils import OrbitCamera
 from gaussian_renderer import GaussianModel, FlameGaussianModel
@@ -74,8 +75,6 @@ class GaussianSplattingViewer:
         self.W = cfg.W
         self.H = cfg.H
         self.cam = OrbitCamera(self.W, self.H, r=cfg.radius, fovy=cfg.fovy, convention="opencv")
-        # self.mesh_color = torch.tensor([0.2, 0.5, 1], dtype=torch.float32)  # default white bg
-        # self.bg_color = torch.ones(3, dtype=torch.float32)  # default white bg
         self.last_time_fresh = None
         self.render_buffer = np.ones((self.W, self.H, 3), dtype=np.float32)
         self.need_update = True  # camera moved, should reset accumulation
@@ -95,6 +94,7 @@ class GaussianSplattingViewer:
         self.show_spatting = True
         self.show_mesh = False
         self.mesh_color = torch.tensor([1, 1, 1, 0.5])
+        self.face_colors = None
         print("Initializing mesh renderer...")
         self.mesh_renderer = NVDiffRenderer(use_opengl=False)
         
@@ -145,7 +145,7 @@ class GaussianSplattingViewer:
         if self.last_time_fresh is not None:
             elapsed = time.time() - self.last_time_fresh
             fps = 1 / elapsed
-            dpg.set_value("_log_fps", f'{fps:.1f}')
+            dpg.set_value("_log_fps", f'{int(fps):<4d}')
         self.last_time_fresh = time.time()
     
     def update_record_timeline(self):
@@ -341,28 +341,25 @@ class GaussianSplattingViewer:
         with dpg.window(label="Render", tag="_render_window", autosize=True):
 
             with dpg.group(horizontal=True):
-                dpg.add_text("FPS: ", show=not self.cfg.demo_mode)
-                dpg.add_text("", tag="_log_fps", show=not self.cfg.demo_mode)
+                dpg.add_text("FPS:", show=not self.cfg.demo_mode)
+                dpg.add_text("0   ", tag="_log_fps", show=not self.cfg.demo_mode)
 
-            # # render_mode combo
-            # def callback_change_mode(sender, app_data):
-            #     self.render_mode = app_data
-            #     self.need_update = True
-            # dpg.add_combo(('rgb', 'depth', 'opacity'), label='render mode', default_value=self.render_mode, callback=callback_change_mode)
-
+            dpg.add_text(f"number of points: {self.gaussians._xyz.shape[0]}")
+            
             with dpg.group(horizontal=True):
-                # show nerf
+                # show splatting
                 def callback_show_splatting(sender, app_data):
                     self.show_spatting = app_data
                     self.need_update = True
                 dpg.add_checkbox(label="show splatting", default_value=self.show_spatting, callback=callback_show_splatting)
 
-            with dpg.group(horizontal=True):
+                dpg.add_spacer(width=10)
+
                 # show mesh
                 def callback_show_mesh(sender, app_data):
                     self.show_mesh = app_data
                     self.need_update = True
-                dpg.add_checkbox(label="show mesh", default_value=self.show_mesh, callback=callback_show_mesh)
+                dpg.add_checkbox(label="show mesh", default_value=self.show_mesh, callback=callback_show_mesh, tag="_checkbox_show_mesh")
 
                 # # show original mesh
                 # def callback_original_mesh(sender, app_data):
@@ -393,15 +390,45 @@ class GaussianSplattingViewer:
                     dpg.add_button(label='+', tag="_button_timestep_plus", callback=callback_set_current_frame)
                     dpg.add_slider_int(label="timestep", tag='_slider_timestep', width=153, min_value=0, max_value=self.num_timesteps - 1, format="%d", default_value=0, callback=callback_set_current_frame)
 
+            # # render_mode combo
+            # def callback_change_mode(sender, app_data):
+            #     self.render_mode = app_data
+            #     self.need_update = True
+            # dpg.add_combo(('rgb', 'depth', 'opacity'), label='render mode', default_value=self.render_mode, callback=callback_change_mode)
+
             # scaling_modifier slider
             def callback_set_scaling_modifier(sender, app_data):
                 self.scaling_modifier = app_data
                 self.need_update = True
             dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=1, format="%.2f", width=200, default_value=self.scaling_modifier, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
-            
+
+            # fov slider
+            def callback_set_fovy(sender, app_data):
+                self.cam.fovy = app_data
+                self.need_update = True
+            dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, width=200, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy", show=not self.cfg.demo_mode)
+
+            # visualization options
+            def callback_visual_options(sender, app_data):
+                if app_data == 'number of points per face':
+                    value, ct = self.gaussians.binding.unique(return_counts=True)
+                    ct = torch.log10(ct + 1)
+                    ct = ct.float() / ct.max()
+                    cmap = matplotlib.colormaps["plasma"]
+                    self.face_colors = torch.from_numpy(cmap(ct.cpu())[None, :, :3]).to(self.gaussians.verts)
+                else:
+                    self.face_colors = self.mesh_color[:3].to(self.gaussians.verts)[None, None, :].repeat(1, self.gaussians.face_center.shape[0], 1)  # (1, F, 3)
+                
+                self.show_mesh = True
+                dpg.set_value('_checkbox_show_mesh', True)
+                self.need_update = True
+            dpg.add_combo(["none", "number of points per face"], default_value="none", label='visualization', width=200, callback=callback_visual_options, tag="_visual_options")
+
             # mesh_color picker
             def callback_change_mesh_color(sender, app_data):
                 self.mesh_color = torch.tensor(app_data, dtype=torch.float32)  # only need RGB in [0, 1]
+                if dpg.get_value("_visual_options") == 'none':
+                    self.face_colors = self.mesh_color[:3].to(self.gaussians.verts)[None, None, :].repeat(1, self.gaussians.face_center.shape[0], 1)
                 self.need_update = True
             dpg.add_color_edit((self.mesh_color*255).tolist(), label="Mesh Color", width=200, callback=callback_change_mesh_color, show=not self.cfg.demo_mode)
 
@@ -423,12 +450,6 @@ class GaussianSplattingViewer:
             #     self.need_update = True
             # dpg.add_slider_int(label="far", min_value=1e-3, max_value=10, format="%.2f", default_value=self.cam.zfar, callback=callback_set_far, tag="_slider_far")
             
-            # fov slider
-            def callback_set_fovy(sender, app_data):
-                self.cam.fovy = app_data
-                self.need_update = True
-            dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, width=200, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy", show=not self.cfg.demo_mode)
-
             # camera
             with dpg.group(horizontal=True):
                 def callback_reset_camera(sender, app_data):
@@ -446,7 +467,7 @@ class GaussianSplattingViewer:
                 dpg.add_button(label="clear cache", tag="_button_clear_cache", callback=callback_clear_cache, show=not self.cfg.demo_mode)
                 
         # window: recording ==================================================================================================
-        with dpg.window(label="Record", tag="_record_window", autosize=True):
+        with dpg.window(label="Record", tag="_record_window", autosize=True, pos=(0, self.H//2)):
             dpg.add_text("Keyframes")
             with dpg.group(horizontal=True):
                 # list keyframes
@@ -544,7 +565,7 @@ class GaussianSplattingViewer:
                 dpg.add_button(label="save image", tag="_button_save_image", callback=callback_save_image)
 
         # window: FLAME ==================================================================================================
-        with dpg.window(label="FLAME parameters", tag="_flame_window", autosize=True):
+        with dpg.window(label="FLAME parameters", tag="_flame_window", autosize=True, pos=(self.W-300, 0)):
             def callback_enable_control(sender, app_data):
                 if app_data:
                     self.gaussians.update_mesh_by_param_dict(self.flame_param)
@@ -561,6 +582,8 @@ class GaussianSplattingViewer:
                 self.flame_param[joint][0, axis_idx] = app_data
                 if joint == 'eyes':
                     self.flame_param[joint][0, 3+axis_idx] = app_data
+                if not dpg.get_value("_checkbox_enable_control"):
+                    dpg.set_value("_checkbox_enable_control", True)
                 self.gaussians.update_mesh_by_param_dict(self.flame_param)
                 self.need_update = True
             dpg.add_text(f'Joints')
@@ -583,6 +606,8 @@ class GaussianSplattingViewer:
             def callback_set_expr(sender, app_data):
                 expr_i = int(sender.split('-')[2])
                 self.flame_param['expr'][0, expr_i] = app_data
+                if not dpg.get_value("_checkbox_enable_control"):
+                    dpg.set_value("_checkbox_enable_control", True)
                 self.gaussians.update_mesh_by_param_dict(self.flame_param)
                 self.need_update = True
             self.expr_sliders = []
@@ -593,6 +618,8 @@ class GaussianSplattingViewer:
 
             def callback_reset_flame(sender, app_data):
                 self.reset_flame_param()
+                if not dpg.get_value("_checkbox_enable_control"):
+                    dpg.set_value("_checkbox_enable_control", True)
                 self.gaussians.update_mesh_by_param_dict(self.flame_param)
                 self.need_update = True
                 for slider in self.pose_sliders + self.expr_sliders:
@@ -755,15 +782,12 @@ class GaussianSplattingViewer:
                     # rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, background_color, scaling_modifier=self.scaling_modifier, override_color=override_color)["render"].permute(1, 2, 0).contiguous()
 
                 if self.gaussians.binding != None and self.show_mesh:
-                    out_dict = self.mesh_renderer.render_from_camera(self.gaussians.verts, faces, cam)
+                    out_dict = self.mesh_renderer.render_from_camera(self.gaussians.verts, faces, cam, face_colors=self.face_colors)
 
                     rgba_mesh = out_dict['rgba'].squeeze(0)  # (H, W, C)
                     rgb_mesh = rgba_mesh[:, :, :3]
                     alpha_mesh = rgba_mesh[:, :, 3:]
-
                     mesh_opacity = self.mesh_color[3:].cuda()
-                    mesh_color = self.mesh_color[:3].cuda()
-                    rgb_mesh = rgb_mesh * (alpha_mesh * mesh_color + (1 - alpha_mesh))
 
                 if self.show_spatting and self.show_mesh:
                     rgb = rgb_mesh * alpha_mesh * mesh_opacity  + rgb_splatting * (alpha_mesh * (1 - mesh_opacity) + (1 - alpha_mesh))

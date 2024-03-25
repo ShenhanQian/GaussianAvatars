@@ -182,6 +182,7 @@ class NVDiffRenderer(torch.nn.Module):
     
     def render_from_camera(
         self, verts, faces, cam: MiniCam, background_color=[1., 1., 1.],
+        face_colors=None,
     ):
         """
         Renders meshes into RGBA images
@@ -198,20 +199,21 @@ class NVDiffRenderer(torch.nn.Module):
         if self.use_opengl:
             image_size = cam.image_height, cam.image_width
             
-            return self.render_mesh(verts, faces, RT, full_proj, image_size, background_color)
+            return self.render_mesh(verts, faces, RT, full_proj, image_size, background_color, face_colors)
         else:
             if cam.image_height > 2048 or cam.image_width > 2048:
                 image_size = 2048, 2048
             else:
                 image_size = int(cam.image_height // 8 * 8), int(cam.image_width // 8 * 8)
 
-            output = self.render_mesh(verts, faces, RT, full_proj, image_size, background_color)
+            output = self.render_mesh(verts, faces, RT, full_proj, image_size, background_color, face_colors)
             for k, v in output.items():
                 output[k] = F.interpolate(v.permute(0, 3, 1, 2), (cam.image_height, cam.image_width), mode='bilinear').permute(0, 2, 3, 1)
             return output
     
     def render_mesh(
         self, verts, faces, RT, full_proj, image_size, background_color=[1., 1., 1.],
+        face_colors=None,
     ):
         """
         Renders meshes into RGBA images
@@ -226,14 +228,18 @@ class NVDiffRenderer(torch.nn.Module):
         fg_mask = torch.clamp(rast_out[..., -1:], 0, 1).bool()
         face_id = torch.clamp(rast_out[..., -1:].long() - 1, 0)  # (B, W, H, 1)
         W, H = face_id.shape[1:3]
+        face_id_ = face_id[:, :, :, None].expand(-1, -1, -1, -1, 3)  # (B, W, H, 1, 1)
 
         face_normals = self.compute_face_normals(verts_camera, faces)  # (B, F, 3)
         face_normals_ = face_normals[:, None, None, :, :].expand(-1, W, H, -1, -1)  # (B, 1, 1, F, 3)
-        face_id_ = face_id[:, :, :, None].expand(-1, -1, -1, -1, 3)  # (B, W, H, 1, 1)
         normal = torch.gather(face_normals_, -2, face_id_).squeeze(-2) # (B, W, H, 3)
 
-        albedo = torch.ones_like(normal)
-        
+        if face_colors is not None:
+            face_colors_ = face_colors[:, None, None, :, :].expand(-1, W, H, -1, -1)  # (B, 1, 1, F, 3)
+            albedo = torch.gather(face_colors_, -2, face_id_).squeeze(-2) # (B, W, H, 3)
+        else:
+            albedo = torch.ones_like(normal)
+            
         # ---- shading ----
         diffuse = self.shade(normal)
 
