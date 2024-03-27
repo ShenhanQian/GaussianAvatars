@@ -134,8 +134,8 @@ class GaussianModel:
             # always need to normalize the rotation quaternions before chaining them
             rot = self.rotation_activation(self._rotation)
             face_orien_quat = self.rotation_activation(self.face_orien_quat[self.binding])
-            return quat_xyzw_to_wxyz(quat_product(quat_wxyz_to_xyzw(rot), quat_wxyz_to_xyzw(face_orien_quat)))  # roma
-            # return quaternion_multiply(rot, face_orien_quat)  # pytorch3d
+            return quat_xyzw_to_wxyz(quat_product(quat_wxyz_to_xyzw(face_orien_quat), quat_wxyz_to_xyzw(rot)))  # roma
+            # return quaternion_multiply(face_orien_quat, rot)  # pytorch3d
     
     @property
     def get_xyz(self):
