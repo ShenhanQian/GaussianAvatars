@@ -125,7 +125,9 @@ class OrbitCamera:
 
     @property
     def fovx(self):
-        return self.fovy / self.image_height * self.image_width
+        focal = self.image_height / (2 * np.tan(np.radians(self.fovy) / 2))
+        fovx = 2 * np.arctan(self.image_width / (2 * focal))
+        return np.degrees(fovx)
     
     @property
     def intrinsics(self):
