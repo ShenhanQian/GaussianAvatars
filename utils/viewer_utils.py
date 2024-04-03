@@ -13,6 +13,8 @@ from scipy.spatial.transform import Rotation as R
 import json
 from pathlib import Path
 import os
+from dataclasses import dataclass
+import dearpygui.dearpygui as dpg
 
 
 def projection_from_intrinsics(K: np.ndarray, image_size: Tuple[int], near: float=0.01, far:float=10, flip_y: bool=False, z_sign=-1):
@@ -79,7 +81,6 @@ class OrbitCamera:
         self.convention = convention
         self.save_path = save_path
 
-        self.up = np.array([0, 1, 0], dtype=np.float32)
         self.reset()
         self.load()
     
@@ -148,7 +149,7 @@ class OrbitCamera:
 
     @property
     def pose(self):
-        # first move camera to radius
+        # first move camera to (0, 0, radius)
         pose = np.eye(4, dtype=np.float32)
         pose[2, 3] += self.radius
 
@@ -168,12 +169,20 @@ class OrbitCamera:
             raise ValueError(f"Unknown convention: {self.convention}")
         return pose
 
-    def orbit(self, dx, dy):
-        # rotate along camera up/side axis!
-        side = self.rot.as_matrix()[:3, 0]
-        rotvec_x = self.up * np.radians(-0.3 * dx)
-        rotvec_y = side * np.radians(-0.3 * dy)
-        self.rot = R.from_rotvec(rotvec_x) * R.from_rotvec(rotvec_y) * self.rot
+    def orbit_x(self, angle_x):
+        axis_x = self.rot.as_matrix()[:3, 0]
+        rotvec_x = axis_x * angle_x
+        self.rot = R.from_rotvec(rotvec_x) * self.rot
+    
+    def orbit_y(self, angle_y):
+        axis_y = self.rot.as_matrix()[:3, 1]
+        rotvec_y = axis_y * angle_y
+        self.rot = R.from_rotvec(rotvec_y) * self.rot
+    
+    def orbit_z(self, angle_z):
+        axis_z = self.rot.as_matrix()[:3, 2]
+        rotvec_z = axis_z * angle_z
+        self.rot = R.from_rotvec(rotvec_z) * self.rot
 
     def scale(self, delta):
         self.radius *= 1.1 ** (-delta)
@@ -182,3 +191,158 @@ class OrbitCamera:
         # pan in camera coordinate system (careful on the sensitivity!)
         d = np.array([dx, -dy, dz])  # the y axis is flipped
         self.look_at += 2 * self.rot.as_matrix()[:3, :3] @ d * self.radius / self.image_height * math.tan(np.radians(self.fovy) / 2)
+
+@dataclass
+class Mini3DViewerConfig:
+    W: int = 960
+    """GUI width"""
+    H: int = 540
+    """GUI height"""
+    radius: float = 1
+    """default GUI camera radius from center"""
+    fovy: float = 20
+    """default GUI camera fovy"""
+
+class Mini3DViewer:
+    def __init__(self, cfg: Mini3DViewerConfig, title='Mini3DViewer'):
+        self.cfg = cfg
+        
+        # viewer settings
+        self.W = cfg.W
+        self.H = cfg.H
+        self.cam = OrbitCamera(self.W, self.H, r=cfg.radius, fovy=cfg.fovy, convention=cfg.cam_convention)
+
+        # buffers for mouse interaction
+        self.cursor_x = None
+        self.cursor_y = None
+        self.cursor_x_prev = None
+        self.cursor_y_prev = None
+        self.drag_begin_x = None
+        self.drag_begin_y = None
+        self.drag_button = None
+
+        # status
+        self.last_time_fresh = None
+        self.render_buffer = np.ones((self.W, self.H, 3), dtype=np.float32)
+        self.need_update = True  # camera moved, should reset accumulation
+        
+        # temporal settings
+        self.timestep = 0  # the chosen timestep of the dataset
+        self.num_timesteps = 1
+
+        # initialize GUI
+        print("Initializing GUI...")
+        dpg.create_context()
+        self.define_gui()
+        self.register_callbacks()
+        dpg.create_viewport(title=title, width=self.W, height=self.H, resizable=True)
+        dpg.setup_dearpygui()
+        dpg.show_viewport()
+
+    
+    def __del__(self):
+        dpg.destroy_context()
+    
+    def define_gui(self):
+        # register texture =================================================================================================
+        with dpg.texture_registry(show=False):
+            dpg.add_raw_texture(self.W, self.H, self.render_buffer, format=dpg.mvFormat_Float_rgb, tag="_texture")
+
+        # register window ==================================================================================================
+        # the window to display the rendered image
+        with dpg.window(label="viewer", tag="_canvas_window", width=self.W, height=self.H, no_title_bar=True, no_move=True, no_bring_to_front_on_focus=True, no_resize=True):
+            dpg.add_image("_texture", width=self.W, height=self.H, tag="_image")
+        
+        with dpg.theme() as theme_no_padding:
+            with dpg.theme_component(dpg.mvAll):
+                # set all padding to 0 to avoid scroll bar
+                dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 0, 0, category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(dpg.mvStyleVar_FramePadding, 0, 0, category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(dpg.mvStyleVar_CellPadding, 0, 0, category=dpg.mvThemeCat_Core)
+        dpg.bind_item_theme("_canvas_window", theme_no_padding)
+
+    def register_callbacks(self):
+        def callback_resize(sender, app_data):
+            self.W = app_data[0]
+            self.H = app_data[1]
+            self.cam.image_width = self.W
+            self.cam.image_height = self.H
+            self.render_buffer = np.zeros((self.H, self.W, 3), dtype=np.float32)
+
+            # delete and re-add the texture and image
+            dpg.delete_item("_texture")
+            dpg.delete_item("_image")
+
+            with dpg.texture_registry(show=False):
+                dpg.add_raw_texture(self.W, self.H, self.render_buffer, format=dpg.mvFormat_Float_rgb, tag="_texture")
+            dpg.add_image("_texture", width=self.W, height=self.H, tag="_image", parent="_canvas_window")
+            dpg.configure_item("_canvas_window", width=self.W, height=self.H)
+        
+        def callback_mouse_move(sender, app_data):
+            self.cursor_x, self.cursor_y = app_data
+
+            # drag
+            if self.drag_begin_x is not None or self.drag_begin_y is not None:
+                if self.cursor_x_prev is None or self.cursor_y_prev is None:
+                    cursor_x_prev = self.drag_begin_x
+                    cursor_y_prev = self.drag_begin_y
+                else:
+                    cursor_x_prev = self.cursor_x_prev
+                    cursor_y_prev = self.cursor_y_prev
+                
+                # drag with left button
+                if self.drag_button is dpg.mvMouseButton_Left:
+                    k = 0.2
+                    # rotate around X&Y axis
+                    if self.W*k < self.drag_begin_x < self.W*(1-k) and self.H*k < self.drag_begin_y < self.H*(1-k):
+                        angle_x = np.radians(-0.3 * (self.cursor_y - cursor_y_prev))
+                        self.cam.orbit_x(angle_x)
+                        
+                        angle_y = np.radians(-0.3 * (self.cursor_x - cursor_x_prev))
+                        self.cam.orbit_y(angle_y)
+                    # rotate around Z axis
+                    else:
+                        xy_begin = np.array([self.cursor_x_prev - self.W//2, self.cursor_y_prev - self.H//2])
+                        xy_end = np.array([self.cursor_x - self.W//2, self.cursor_y - self.H//2])
+                        angle_z = np.arctan2(xy_end[1], xy_end[0]) - np.arctan2(xy_begin[1], xy_begin[0])
+                        self.cam.orbit_z(angle_z)
+                
+                # drag with middle button
+                elif self.drag_button is dpg.mvMouseButton_Middle:
+                    # Pan in X-Y plane
+                    self.cam.pan(self.cursor_x - cursor_x_prev, self.cursor_y - cursor_y_prev)
+                self.need_update = True
+            
+            self.cursor_x_prev = self.cursor_x
+            self.cursor_y_prev = self.cursor_y
+
+        def callback_mouse_button_down(sender, app_data):
+            if not dpg.is_item_hovered("_canvas_window"):
+                return
+            if self.drag_button != app_data[0]:
+                self.drag_begin_x = self.cursor_x
+                self.drag_begin_y = self.cursor_y
+                self.drag_button = app_data[0]
+        
+        def callback_mouse_release(sender, app_data):
+            self.drag_begin_x = None
+            self.drag_begin_y = None
+            self.drag_button = None
+            self.cursor_x_prev = None
+            self.cursor_y_prev = None
+
+        def callbackmouse_wheel(sender, app_data):
+            delta = app_data
+            if dpg.is_item_hovered("_canvas_window"):
+                self.cam.scale(delta)
+                self.need_update = True
+
+        with dpg.handler_registry():
+            dpg.set_viewport_resize_callback(callback_resize)
+
+            # this registry order helps avoid false fire
+            dpg.add_mouse_release_handler(callback=callback_mouse_release)
+            # dpg.add_mouse_drag_handler(callback=callback_mouse_drag)  # not using the drag callback, since it does not return the starting point
+            dpg.add_mouse_move_handler(callback=callback_mouse_move)
+            dpg.add_mouse_down_handler(callback=callback_mouse_button_down)
+            dpg.add_mouse_wheel_handler(callback=callbackmouse_wheel)
