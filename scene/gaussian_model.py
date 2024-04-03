@@ -70,7 +70,7 @@ class GaussianModel:
         self.binding = None  # gaussian index to face index
         self.binding_counter = None  # number of points bound to each face
         self.timestep = None  # the current timestep
-        self.num_timesteps = None  # required by viewers
+        self.num_timesteps = 1  # required by viewers
 
     def capture(self):
         return (
@@ -172,6 +172,7 @@ class GaussianModel:
     def create_from_pcd(self, pcd : Optional[BasicPointCloud], spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
         if pcd == None:
+            assert self.binding is not None
             num_pts = self.binding.shape[0]
             fused_point_cloud = torch.zeros((num_pts, 3)).float().cuda()
             fused_color = torch.tensor(np.random.random((num_pts, 3)) / 255.0).float().cuda()
@@ -249,8 +250,9 @@ class GaussianModel:
             l.append('scale_{}'.format(i))
         for i in range(self._rotation.shape[1]):
             l.append('rot_{}'.format(i))
-        for i in range(1):
-            l.append('binding_{}'.format(i))
+        if self.binding is not None:
+            for i in range(1):
+                l.append('binding_{}'.format(i))
         return l
 
     def save_ply(self, path):
@@ -263,12 +265,16 @@ class GaussianModel:
         opacities = self._opacity.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
-        binding = self.binding.detach().cpu().numpy()
 
         dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
 
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        attributes = np.concatenate((xyz, normals, f_dc, f_rest, opacities, scale, rotation, binding[:, None]), axis=1)
+        attributes = np.concatenate((xyz, normals, f_dc, f_rest, opacities, scale, rotation), axis=1)
+
+        if self.binding is not None:
+            binding = self.binding.detach().cpu().numpy()
+            attributes = np.concatenate((attributes, binding[:, None]), axis=1)
+
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, 'vertex')
         PlyData([el]).write(path)
@@ -311,12 +317,6 @@ class GaussianModel:
         rots = np.zeros((xyz.shape[0], len(rot_names)))
         for idx, attr_name in enumerate(rot_names):
             rots[:, idx] = np.asarray(plydata.elements[0][attr_name])
-        
-        binding_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("binding")]
-        binding_names = sorted(binding_names, key = lambda x: int(x.split('_')[-1]))
-        binding = np.zeros((xyz.shape[0], len(binding_names)), dtype=np.int32)
-        for idx, attr_name in enumerate(binding_names):
-            binding[:, idx] = np.asarray(plydata.elements[0][attr_name])
 
         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda").requires_grad_(True))
         self._features_dc = nn.Parameter(torch.tensor(features_dc, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
@@ -324,9 +324,17 @@ class GaussianModel:
         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(True))
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
-        self.binding = torch.tensor(binding, dtype=torch.int32, device="cuda").squeeze(-1)
 
         self.active_sh_degree = self.max_sh_degree
+
+        # optional fields
+        binding_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("binding")]
+        if len(binding_names) > 0:
+            binding_names = sorted(binding_names, key = lambda x: int(x.split('_')[-1]))
+            binding = np.zeros((xyz.shape[0], len(binding_names)), dtype=np.int32)
+            for idx, attr_name in enumerate(binding_names):
+                binding[:, idx] = np.asarray(plydata.elements[0][attr_name])
+            self.binding = torch.tensor(binding, dtype=torch.int32, device="cuda").squeeze(-1)
 
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
@@ -366,7 +374,7 @@ class GaussianModel:
         return optimizable_tensors
 
     def prune_points(self, mask):
-        if self.binding != None:
+        if self.binding is not None:
             # make sure each face is bound to at least one point after pruning
             binding_to_prune = self.binding[mask]
             counter_prune = torch.zeros_like(self.binding_counter)
@@ -389,7 +397,7 @@ class GaussianModel:
         self.denom = self.denom[valid_points_mask]
         self.max_radii2D = self.max_radii2D[valid_points_mask]
 
-        if self.binding != None:
+        if self.binding is not None:
             # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
             self.binding_counter.scatter_add_(0, self.binding[mask], -torch.ones_like(self.binding[mask], dtype=torch.int32, device="cuda"))
             self.binding = self.binding[valid_points_mask]
@@ -454,7 +462,7 @@ class GaussianModel:
         samples = torch.normal(mean=means, std=stds)
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
         new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1)
-        if self.binding != None:
+        if self.binding is not None:
             selected_scaling = self.get_scaling[selected_pts_mask]
             face_scaling = self.face_scaling[self.binding[selected_pts_mask]]
             new_scaling = self.scaling_inverse_activation((selected_scaling / face_scaling).repeat(N,1) / (0.8*N))
@@ -465,7 +473,7 @@ class GaussianModel:
         new_features_dc = self._features_dc[selected_pts_mask].repeat(N,1,1)
         new_features_rest = self._features_rest[selected_pts_mask].repeat(N,1,1)
         new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
-        if hasattr(self, "binding"):
+        if self.binding is not None:
             # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
             new_binding = self.binding[selected_pts_mask].repeat(N)
             self.binding = torch.cat((self.binding, new_binding))
@@ -488,7 +496,7 @@ class GaussianModel:
         new_opacities = self._opacity[selected_pts_mask]
         new_scaling = self._scaling[selected_pts_mask]
         new_rotation = self._rotation[selected_pts_mask]
-        if hasattr(self, "binding"):
+        if self.binding is not None:
             # Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual property and proprietary rights in and to the following code lines and related documentation. Any commercial use, reproduction, disclosure or distribution of these code lines and related documentation without an express license agreement from Toyota Motor Europe NV/SA is strictly prohibited.
             new_binding = self.binding[selected_pts_mask]
             self.binding = torch.cat((self.binding, new_binding))

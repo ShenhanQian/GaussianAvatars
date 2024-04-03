@@ -272,7 +272,7 @@ def training_report(tb_writer, iteration, losses, elapsed, testing_iterations, s
                 gt_image_cache = []
                 vis_ct = 0
                 for idx, viewpoint in tqdm(enumerate(DataLoader(config['cameras'], shuffle=False, batch_size=None, num_workers=8)), total=len(config['cameras'])):
-                    if hasattr(scene.gaussians, "select_mesh_by_timestep"):
+                    if scene.gaussians.num_timesteps > 1:
                         scene.gaussians.select_mesh_by_timestep(viewpoint.timestep)
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
@@ -330,12 +330,14 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     args = parser.parse_args(sys.argv[1:])
+    if args.interval > op.iterations:
+        args.interval = op.iterations // 5
     if len(args.test_iterations) == 0:
-        args.test_iterations.extend(list(range(args.interval, args.iterations, args.interval)) + [args.iterations])
+        args.test_iterations.extend(list(range(args.interval, args.iterations+1, args.interval)))
     if len(args.save_iterations) == 0:
-        args.save_iterations.extend(list(range(args.interval, args.iterations, args.interval)) + [args.iterations])
+        args.save_iterations.extend(list(range(args.interval, args.iterations+1, args.interval)))
     if len(args.checkpoint_iterations) == 0:
-        args.checkpoint_iterations.extend(list(range(args.interval, args.iterations, args.interval)) + [args.iterations])
+        args.checkpoint_iterations.extend(list(range(args.interval, args.iterations+1, args.interval)))
     
     print("Optimizing " + args.model_path)
 

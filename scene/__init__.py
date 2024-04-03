@@ -24,7 +24,8 @@ from scene.flame_gaussian_model import FlameGaussianModel
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 from utils.general_utils import PILtoTorch
-from PIL import Image
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class CameraDataset(torch.utils.data.Dataset):
@@ -39,9 +40,12 @@ class CameraDataset(torch.utils.data.Dataset):
             # ---- from readCamerasFromTransforms() ----
             camera = deepcopy(self.cameras[idx])
 
-            image = Image.open(camera.image_path)
-            im_data = np.array(image.convert("RGBA"))
+            if camera.image is None:
+                image = Image.open(camera.image_path)
+            else:
+                image = camera.image
 
+            im_data = np.array(image.convert("RGBA"))
             norm_data = im_data / 255.0
             arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + camera.bg * (1 - norm_data[:, :, 3:4])
             image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")

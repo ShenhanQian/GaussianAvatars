@@ -30,14 +30,14 @@ class CameraInfo(NamedTuple):
     T: np.array
     FovY: np.array
     FovX: np.array
-    bg: np.array
-    # image: np.array
+    image: Optional[np.array]
     image_path: str
     image_name: str
     width: int
     height: int
-    timestep: Optional[int]
-    camera_id: Optional[int]
+    bg: np.array = np.array([0, 0, 0])
+    timestep: Optional[int] = None
+    camera_id: Optional[int] = None
 
 class SceneInfo(NamedTuple):
     train_cameras: list
@@ -45,11 +45,11 @@ class SceneInfo(NamedTuple):
     nerf_normalization: dict
     point_cloud: Optional[BasicPointCloud]
     ply_path: Optional[str]
-    val_cameras: Optional[list]
-    train_meshes: Optional[dict]
-    test_meshes: Optional[dict]
-    tgt_train_meshes: Optional[dict]
-    tgt_test_meshes: Optional[dict]
+    val_cameras: list = []
+    train_meshes: dict = {}
+    test_meshes: dict = {}
+    tgt_train_meshes: dict = {}
+    tgt_test_meshes: dict = {}
 
 def getNerfppNorm(cam_info):
     def get_center_and_diag(cam_centers):
@@ -106,6 +106,7 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path)
+        width, height = image.size
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                               image_path=image_path, image_name=image_name, width=width, height=height)
@@ -210,33 +211,36 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
             T = w2c[:3, 3]
 
-            image_path = os.path.join(path, cam_name)
-            image_name = Path(cam_name).stem
-            # image = Image.open(image_path)
-
-            # im_data = np.array(image.convert("RGBA"))
-
             bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
 
-            # norm_data = im_data / 255.0
-            # arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
-            # image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
+            image_path = os.path.join(path, cam_name)
+            image_name = Path(cam_name).stem
+            
+            if 'w' in frame and 'h' in frame:
+                image = None
+                width = frame['w']
+                height = frame['h']
+            else:
+                image = Image.open(image_path)
+                im_data = np.array(image.convert("RGBA"))
+                norm_data = im_data / 255.0
+                arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
+                image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
+                width, height = image.size
 
             if 'camera_angle_x' in frame:
                 fovx = frame["camera_angle_x"]
             else:
                 fovx = fovx_shared
-            fovy = focal2fov(fov2focal(fovx, frame['w']), frame['h'])
-            FovY = fovy 
-            FovX = fovx
+            fovy = focal2fov(fov2focal(fovx, width), height)
 
             timestep = frame["timestep_index"] if 'timestep_index' in frame else None
             camera_id = frame["camera_index"] if 'camera_id' in frame else None
             
             cam_infos.append(CameraInfo(
-                uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, bg=bg, #image=image, 
+                uid=idx, R=R, T=T, FovY=fovy, FovX=fovx, bg=bg, image=image, 
                 image_path=image_path, image_name=image_name, 
-                width=frame['w'], height=frame['h'], 
+                width=width, height=height, 
                 timestep=timestep, camera_id=camera_id))
     return cam_infos
 
