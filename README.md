@@ -46,9 +46,11 @@ This work is made available under [Creative Commons Attribution-NonCommercial-Sh
 | 2.0.1 | 11.7.1 | Pass | Fail to compile | Pass |
 | 2.2.0 | 12.1.1 | Pass | Pass | Pass |
 
-### Environment
+### Installation
 
 Our default installation method is based on Conda package and environment management:
+
+#### Step 1: Clone the repo and install `cuda-toolkit` with `conda`
 
 ```shell
 git clone https://github.com/ShenhanQian/GaussianAvatars.git --recursive
@@ -59,36 +61,54 @@ conda activate gaussian-avatars
 
 # Install CUDA and ninja for compilation
 conda install -c "nvidia/label/cuda-11.7.1" cuda-toolkit ninja  # use the right CUDA version
+```
 
-# ==== for Linux ====
+#### Step 2a: Setup paths (for Linux)
+
+```shell
 ln -s "$CONDA_PREFIX/lib" "$CONDA_PREFIX/lib64"  # to avoid error "/usr/bin/ld: cannot find -lcudart"
+```
 
-# ==== for Windows ====
-## ---- for PowerShell ----
+#### Step 2b: Setup environment variables (for Windows with PowerShell)
+
+```shell
 conda env config vars set CUDA_PATH="$env:CONDA_PREFIX"  
+
 ## Visual Studio 2022 (modify the version number `14.39.33519` accordingly)
 conda env config vars set PATH="$env:CONDA_PREFIX\Script;C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.39.33519\bin\Hostx64\x64;$env:PATH"
 ## or Visual Studio 2019 (modify the version number `14.29.30133` accordingly)
 conda env config vars set PATH="$env:CONDA_PREFIX\Script;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.29.30133\bin\HostX86\x86;$env:PATH" 
-## ---- for Command Prompt ----
+
+# re-activate the environment to make the above eonvironment variables effective
+conda deactivate
+conda activate gaussian-avatars
+```
+
+#### Step 2c: Setup environment variables (for Windows with Command Prompt)
+
+```shell
 conda env config vars set CUDA_PATH=%CONDA_PREFIX%
+
 ## Visual Studio 2022 (modify the version number `14.39.33519` accordingly)
 conda env config vars set PATH="%CONDA_PREFIX%\Script;C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.39.33519\bin\Hostx64\x64;%PATH%"
 ## or Visual Studio 2019 (modify the version number `14.29.30133` accordingly)
 conda env config vars set PATH="%CONDA_PREFIX%\Script;C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.29.30133\bin\HostX86\x86;%PATH%"
-## --------
+
 # re-activate the environment to make the above eonvironment variables effective
 conda deactivate
 conda activate gaussian-avatars
-# ========
+```
 
-# Install PyTorch (make sure the CUDA version match with the above)
+#### Step 3: Install PyTorch and other packages
+
+```shell
+# Install PyTorch (make sure that the CUDA version matches with "Step 1")
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu117
 # or
 conda install pytorch torchvision pytorch-cuda=11.7 -c pytorch -c nvidia
 # make sure torch.cuda.is_available() returns True
 
-# Install the rest pacakges (can take a while to compile diff-gaussian-rasterization, simple-knn, and nvdiffrast)
+# Install the rest packages (can take a while to compile diff-gaussian-rasterization, simple-knn, and nvdiffrast)
 pip install -r requirements.txt
 ```
 
@@ -200,7 +220,9 @@ python train.py \
 
 </details>
 
-By default, the trained models use all available images in the dataset. To train them while withholding a validation set and a test set for evaluation, use the ```--eval``` flag. Evaluation on the validation and test set will be conducted every `--interval` iterations. You can check the metrics in the terminal or within tensorboard.
+By default, the trained models use all available images in the dataset. To train them while withholding a validation set and a test set for evaluation, use the ```--eval``` flag. 
+
+A complete evaluation on the validation set (novel-view synthesis) and test set (self-reenactment) will be conducted every `--interval` iterations. You can check the metrics in the terminal or within Tensorboard. Although we only save a few images in Tensorboard, the metrics are computed on all images.
 
 ### Rendering
 
@@ -208,7 +230,7 @@ By default, the trained models use all available images in the dataset. To train
 python render.py -m <path to trained model> # Generate renderings
 ```
 
-Only render the validation set:
+Render the validation set (novel-view synthesis):
 
 ```shell
 SUBJECT=306
@@ -218,7 +240,18 @@ python render.py \
 --skip_train --skip_test
 ```
 
-Only render the test set (and only in a front view):
+Render the test set (self-reenactment):
+
+```shell
+SUBJECT=306
+
+python render.py \
+-m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
+--skip_train --skip_val
+```
+
+Render the test set (self-reenactment) only in a front view:
+
 ```shell
 SUBJECT=306
 
@@ -228,7 +261,20 @@ python render.py \
 --select_camera_id 8  # front view
 ```
 
-Reenactment (only in a front view):
+Cross-identity reenactment with the `FREE` sequence of `TGT_SUBJECT`:
+
+```shell
+SUBJECT=306
+TGT_SUBJECT=218
+
+python render.py \
+-t data/${TGT_SUBJECT}_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
+-m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
+--select_camera_id 8  # front view
+```
+
+Cross-identity reenactment with 10 prescribed motion sequences of `TGT_SUBJECT`:
+
 ```shell
 SUBJECT=306
 TGT_SUBJECT=218
@@ -238,7 +284,6 @@ python render.py \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
 --select_camera_id 8  # front view
 ```
-
 
 <details>
 <summary><span style="font-weight: bold;">Command Line Arguments for render.py</span></summary>
@@ -276,21 +321,6 @@ python render.py \
   Flag to make pipeline render with computed 3D covariance from PyTorch instead of ours.
 
 </details>
-
-### Computing metrics
-
-```shell
-python metrics.py -m <path to trained model> # Compute error metrics on renderings
-```
-
-<details>
-<summary><span style="font-weight: bold;">Command Line Arguments for metrics.py</span></summary>
-
-  #### --model_paths / -m 
-  Space-separated list of model paths for which metrics should be computed.
-</details>
-<br>
-
 
 ## Interactive Viewers
 We provide two interactive viewers for our method: remote and real-time. Our viewing solutions are based on DearPyGUI.
