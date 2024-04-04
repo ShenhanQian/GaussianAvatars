@@ -62,12 +62,6 @@ class Config(Mini3DViewerConfig):
 class LocalViewer(Mini3DViewer):
     def __init__(self, cfg: Config):
         self.cfg = cfg
-
-        # rendering settings
-        self.mesh_color = torch.tensor([1, 1, 1, 0.5])
-        self.face_colors = None
-        print("Initializing mesh renderer...")
-        self.mesh_renderer = NVDiffRenderer(use_opengl=False)
         
         # recording settings
         self.keyframes = []  # list of state dicts of keyframes
@@ -77,6 +71,13 @@ class LocalViewer(Mini3DViewer):
 
         print("Initializing 3D Gaussians...")
         self.init_gaussians()
+
+        if self.gaussians.binding is not None:
+            # rendering settings
+            self.mesh_color = torch.tensor([1, 1, 1, 0.5])
+            self.face_colors = None
+            print("Initializing mesh renderer...")
+            self.mesh_renderer = NVDiffRenderer(use_opengl=False)
         
         # FLAME parameters
         if self.gaussians.binding is not None:
@@ -314,16 +315,17 @@ class LocalViewer(Mini3DViewer):
 
                 dpg.add_spacer(width=10)
 
-                # show mesh
-                def callback_show_mesh(sender, app_data):
-                    self.need_update = True
-                dpg.add_checkbox(label="show mesh", default_value=False, callback=callback_show_mesh, tag="_checkbox_show_mesh")
+                if self.gaussians.binding is not None:
+                    # show mesh
+                    def callback_show_mesh(sender, app_data):
+                        self.need_update = True
+                    dpg.add_checkbox(label="show mesh", default_value=False, callback=callback_show_mesh, tag="_checkbox_show_mesh")
 
-                # # show original mesh
-                # def callback_original_mesh(sender, app_data):
-                #     self.original_mesh = app_data
-                #     self.need_update = True
-                # dpg.add_checkbox(label="original mesh", default_value=self.original_mesh, callback=callback_original_mesh)
+                    # # show original mesh
+                    # def callback_original_mesh(sender, app_data):
+                    #     self.original_mesh = app_data
+                    #     self.need_update = True
+                    # dpg.add_checkbox(label="original mesh", default_value=self.original_mesh, callback=callback_original_mesh)
             
             # timestep slider and buttons
             if self.num_timesteps != None:
@@ -365,28 +367,29 @@ class LocalViewer(Mini3DViewer):
                 self.need_update = True
             dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, width=200, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy, tag="_slider_fovy", show=not self.cfg.demo_mode)
 
-            # visualization options
-            def callback_visual_options(sender, app_data):
-                if app_data == 'number of points per face':
-                    value, ct = self.gaussians.binding.unique(return_counts=True)
-                    ct = torch.log10(ct + 1)
-                    ct = ct.float() / ct.max()
-                    cmap = matplotlib.colormaps["plasma"]
-                    self.face_colors = torch.from_numpy(cmap(ct.cpu())[None, :, :3]).to(self.gaussians.verts)
-                else:
-                    self.face_colors = self.mesh_color[:3].to(self.gaussians.verts)[None, None, :].repeat(1, self.gaussians.face_center.shape[0], 1)  # (1, F, 3)
-                
-                dpg.set_value('_checkbox_show_mesh', True)
-                self.need_update = True
-            dpg.add_combo(["none", "number of points per face"], default_value="none", label='visualization', width=200, callback=callback_visual_options, tag="_visual_options")
+            if self.gaussians.binding is not None:
+                # visualization options
+                def callback_visual_options(sender, app_data):
+                    if app_data == 'number of points per face':
+                        value, ct = self.gaussians.binding.unique(return_counts=True)
+                        ct = torch.log10(ct + 1)
+                        ct = ct.float() / ct.max()
+                        cmap = matplotlib.colormaps["plasma"]
+                        self.face_colors = torch.from_numpy(cmap(ct.cpu())[None, :, :3]).to(self.gaussians.verts)
+                    else:
+                        self.face_colors = self.mesh_color[:3].to(self.gaussians.verts)[None, None, :].repeat(1, self.gaussians.face_center.shape[0], 1)  # (1, F, 3)
+                    
+                    dpg.set_value('_checkbox_show_mesh', True)
+                    self.need_update = True
+                dpg.add_combo(["none", "number of points per face"], default_value="none", label='visualization', width=200, callback=callback_visual_options, tag="_visual_options")
 
-            # mesh_color picker
-            def callback_change_mesh_color(sender, app_data):
-                self.mesh_color = torch.tensor(app_data, dtype=torch.float32)  # only need RGB in [0, 1]
-                if dpg.get_value("_visual_options") == 'none':
-                    self.face_colors = self.mesh_color[:3].to(self.gaussians.verts)[None, None, :].repeat(1, self.gaussians.face_center.shape[0], 1)
-                self.need_update = True
-            dpg.add_color_edit((self.mesh_color*255).tolist(), label="Mesh Color", width=200, callback=callback_change_mesh_color, show=not self.cfg.demo_mode)
+                # mesh_color picker
+                def callback_change_mesh_color(sender, app_data):
+                    self.mesh_color = torch.tensor(app_data, dtype=torch.float32)  # only need RGB in [0, 1]
+                    if dpg.get_value("_visual_options") == 'none':
+                        self.face_colors = self.mesh_color[:3].to(self.gaussians.verts)[None, None, :].repeat(1, self.gaussians.face_center.shape[0], 1)
+                    self.need_update = True
+                dpg.add_color_edit((self.mesh_color*255).tolist(), label="Mesh Color", width=200, callback=callback_change_mesh_color, show=not self.cfg.demo_mode)
 
             # # bg_color picker
             # def callback_change_bg(sender, app_data):
