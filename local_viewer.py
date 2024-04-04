@@ -184,9 +184,9 @@ class LocalViewer(Mini3DViewer):
         if 'look_at' in state_dict:
             self.cam.look_at = state_dict['look_at']
         if 'radius' in state_dict:
-            self.cam.radius = state_dict['radius']
+            self.cam.radius = state_dict['radius'].item()
         if 'fovy' in state_dict:
-            self.cam.fovy = state_dict['fovy']
+            self.cam.fovy = state_dict['fovy'].item()
     
     def parse_ref_json(self):
         if self.cfg.ref_json is None:
