@@ -187,7 +187,7 @@ class OrbitCamera:
     def scale(self, delta):
         self.radius *= 1.1 ** (-delta)
 
-    def pan(self, dx, dy, dz=0):
+    def pan(self, dx=0, dy=0, dz=0):
         # pan in camera coordinate system (careful on the sensitivity!)
         d = np.array([dx, -dy, dz])  # the y axis is flipped
         self.look_at += 2 * self.rot.as_matrix()[:3, :3] @ d * self.radius / self.image_height * math.tan(np.radians(self.fovy) / 2)
@@ -292,7 +292,7 @@ class Mini3DViewer:
                 
                 # drag with left button
                 if self.drag_button is dpg.mvMouseButton_Left:
-                    k = 0.2
+                    k = 0.1
                     # rotate around X&Y axis
                     if self.W*k < self.drag_begin_x < self.W*(1-k) and self.H*k < self.drag_begin_y < self.H*(1-k):
                         angle_x = np.radians(-0.3 * (self.cursor_y - cursor_y_prev))
@@ -310,7 +310,7 @@ class Mini3DViewer:
                 # drag with middle button
                 elif self.drag_button is dpg.mvMouseButton_Middle:
                     # Pan in X-Y plane
-                    self.cam.pan(self.cursor_x - cursor_x_prev, self.cursor_y - cursor_y_prev)
+                    self.cam.pan(dx=self.cursor_x - cursor_x_prev, dy=self.cursor_y - cursor_y_prev)
                 self.need_update = True
             
             self.cursor_x_prev = self.cursor_x
@@ -331,11 +331,28 @@ class Mini3DViewer:
             self.cursor_x_prev = None
             self.cursor_y_prev = None
 
-        def callbackmouse_wheel(sender, app_data):
+        def callback_mouse_wheel(sender, app_data):
             delta = app_data
             if dpg.is_item_hovered("_canvas_window"):
                 self.cam.scale(delta)
                 self.need_update = True
+        
+        def callback_key_press(sender, app_data):
+            step = 30
+            if sender == '_mvKey_W':
+                self.cam.pan(dz=step)
+            elif sender == '_mvKey_S':
+                self.cam.pan(dz=-step)
+            elif sender == '_mvKey_A':
+                self.cam.pan(dx=step)
+            elif sender == '_mvKey_D':
+                self.cam.pan(dx=-step)
+            elif sender == '_mvKey_E':
+                self.cam.pan(dy=step)
+            elif sender == '_mvKey_Q':
+                self.cam.pan(dy=-step)
+
+            self.need_update = True
 
         with dpg.handler_registry():
             dpg.set_viewport_resize_callback(callback_resize)
@@ -345,4 +362,12 @@ class Mini3DViewer:
             # dpg.add_mouse_drag_handler(callback=callback_mouse_drag)  # not using the drag callback, since it does not return the starting point
             dpg.add_mouse_move_handler(callback=callback_mouse_move)
             dpg.add_mouse_down_handler(callback=callback_mouse_button_down)
-            dpg.add_mouse_wheel_handler(callback=callbackmouse_wheel)
+            dpg.add_mouse_wheel_handler(callback=callback_mouse_wheel)
+
+            dpg.add_key_press_handler(dpg.mvKey_W, callback=callback_key_press, tag='_mvKey_W')
+            dpg.add_key_press_handler(dpg.mvKey_S, callback=callback_key_press, tag='_mvKey_S')
+            dpg.add_key_press_handler(dpg.mvKey_A, callback=callback_key_press, tag='_mvKey_A')
+            dpg.add_key_press_handler(dpg.mvKey_D, callback=callback_key_press, tag='_mvKey_D')
+            dpg.add_key_press_handler(dpg.mvKey_E, callback=callback_key_press, tag='_mvKey_E')
+            dpg.add_key_press_handler(dpg.mvKey_Q, callback=callback_key_press, tag='_mvKey_Q')
+
