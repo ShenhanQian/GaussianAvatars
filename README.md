@@ -128,7 +128,7 @@ Our code and the pre-processed data relies on FLAME 2023. Downloaded assets from
 - `flame_model/assets/flame/flame2023.pkl`  # FLAME 2023 (versions w/ jaw rotation)
 - `flame_model/assets/flame/FLAME_masks.pkl`  # FLAME Vertex Masks
 
-> It is possible to run our method with FLAME 2020 by download to `flame_model/assets/flamegeneric_model.pkl`. The `FLAME_MODEL_PATH` in `flame_model/flame.py` needs to be updated accordingly. And the FLAME tracking results should also be based on FLAME 2020 in this case.
+> It is possible to run our method with FLAME 2020 by download to `flame_model/assets/flame/generic_model.pkl`. The `FLAME_MODEL_PATH` in `flame_model/flame.py` needs to be updated accordingly. And the FLAME tracking results should also be based on FLAME 2020 in this case.
 
 ## Running
 ### Training
