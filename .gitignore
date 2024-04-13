@@ -7,7 +7,7 @@ diff_rasterization/dist
 tensorboard_3d
 screenshots
 data
-submodules/
+# submodules/
 viewer_output
 flame_model/assets
 job/
