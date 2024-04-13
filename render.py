@@ -30,7 +30,7 @@ from gaussian_renderer import GaussianModel, FlameGaussianModel
 from mesh_renderer import NVDiffRenderer
 
 
-mesh_renderer = NVDiffRenderer()
+mesh_renderer = NVDiffRenderer(use_opengl=False)
 
 def write_data(path2data):
     for path, data in path2data.items():
