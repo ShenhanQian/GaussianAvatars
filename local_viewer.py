@@ -55,7 +55,9 @@ class Config(Mini3DViewerConfig):
     keyframe_interval: int = 1
     """default keyframe interval"""
     ref_json: Optional[Path] = None
-    """Path to the reference json file. We use this file to complement the exported trajectory json file."""
+    """ Path to a reference json file. We copy file paths from a reference json into 
+    the exported trajectory json file as placeholders so that `render.py` can directly
+    load it like a normal sequence. """
     demo_mode: bool = False
     """The UI will be simplified in demo mode."""
 
@@ -264,10 +266,11 @@ class LocalViewer(Mini3DViewer):
                 "transform_matrix": c2w.tolist(),
                 'timestep_index': timestep_index,
                 'camera_indx': camera_indx,
-                'file_path': tid2paths[timestep_index]['file_path'],
-                'fg_mask_path': tid2paths[timestep_index]['fg_mask_path'],
-                'flame_param_path': tid2paths[timestep_index]['flame_param_path'],
             }
+            if timestep_index in tid2paths:
+                frame['file_path'] = tid2paths[timestep_index]['file_path']
+                frame['fg_mask_path'] = tid2paths[timestep_index]['fg_mask_path']
+                frame['flame_param_path'] = tid2paths[timestep_index]['flame_param_path']
             traj_dict['frames'].append(frame)
 
             # update timestep
