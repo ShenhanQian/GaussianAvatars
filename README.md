@@ -116,9 +116,9 @@ pip install -r requirements.txt
 
 #### Preprocessed NeRSemble Dataset
 
-We use 9 subjects from NeRSemble dataset in our paper. We provide the pre-processed data with this OneDrive [link](https://tumde-my.sharepoint.com/:f:/g/personal/shenhan_qian_tum_de/EtgO7DSNVzNKuYMRQeL4PE0BqMsTwdpQ09puewDLQBz87A). Please request [here](https://forms.gle/dPEJx5DNvmhTm2Ry5) to get access and download it into `data/`.
+We use 9 subjects from NeRSemble dataset in our paper. You can download the pre-processed data from [LRZ](https://syncandshare.lrz.de/getlink/fiRXRYvdGQoC162RZDDaZc/release) or [OneDrive](https://tumde-my.sharepoint.com/:f:/g/personal/shenhan_qian_tum_de/EtgO7DSNVzNKuYMRQeL4PE0BqMsTwdpQ09puewDLQBz87A).
 
-Please also request for the raw dataset [here](https://forms.gle/rYRoGNh2ed51TDWX9) although you do not need to download it to run this repo.
+Please request [here](https://forms.gle/dPEJx5DNvmhTm2Ry5) to get approval. Please also request for the raw dataset [here](https://forms.gle/rYRoGNh2ed51TDWX9) although you do not need to download it to run this repo.
 
 
 #### FLAME Model
