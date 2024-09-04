@@ -67,6 +67,7 @@ conda install -c "nvidia/label/cuda-11.7.1" cuda-toolkit ninja  # use the right 
 
 ```shell
 ln -s "$CONDA_PREFIX/lib" "$CONDA_PREFIX/lib64"  # to avoid error "/usr/bin/ld: cannot find -lcudart"
+conda env config vars set CUDA_HOME=$CONDA_PREFIX  # for compilation
 ```
 
 #### Step 2b: Setup environment variables (for Windows with PowerShell)
