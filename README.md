@@ -1,8 +1,12 @@
 # GaussianAvatars: Photorealistic Head Avatars with Rigged 3D Gaussians
 
-![Method](assets/method.jpg)
+<div align="center"> 
+  <img src="media/demo.gif">
 
-[project](https://shenhanqian.github.io/gaussian-avatars) / [arxiv](http://arxiv.org/abs/2312.02069) / [video](https://www.youtube.com/watch?v=lVEY78RwU_I) / [face tracker](https://github.com/ShenhanQian/VHAP) / [bibtex](https://shenhanqian.github.io/raw.html?filePath=/assets/2023-12-04-gaussian-avatars/bibtex.bib)
+  <br>
+
+  [project](https://shenhanqian.github.io/gaussian-avatars) / [arxiv](http://arxiv.org/abs/2312.02069) / [video](https://www.youtube.com/watch?v=lVEY78RwU_I) / [face tracker](https://github.com/ShenhanQian/VHAP) / [bibtex](https://shenhanqian.github.io/raw.html?filePath=/assets/2023-12-04-gaussian-avatars/bibtex.bib)
+</div>
 
 ## Licenses
 
@@ -14,6 +18,8 @@ This project uses [Gaussian Splatting](https://github.com/graphdeco-inria/gaussi
 The GUI is inspired by [INSTA](https://github.com/Zielon/INSTA). 
 The mesh rendering operations are adapted from [NVDiffRec](https://github.com/NVlabs/nvdiffrec) and [NVDiffRast](https://github.com/NVlabs/nvdiffrast). 
 
+![Method](media/method.jpg)
+
 ## Setup
 
 ### [1. Installation](doc/installation.md)
@@ -21,6 +27,12 @@ The mesh rendering operations are adapted from [NVDiffRec](https://github.com/NV
 ### [2. Download](doc/download.md)
 
 ## Usage
+
+### 0. Demo
+You can play with a trained GaussianAvatar without downloading the dataset:
+```shell
+python local_viewer.py --point_path media/306/point_cloud.ply
+```
 
 ### 1. Training
 
@@ -80,7 +92,7 @@ python train.py \
 
 #### Remote Viewer
 
-![remote viewer](assets/remote_viewer.png)
+![remote viewer](media/remote_viewer.png)
 
 During training, one can monitor the training progress with the remote viewer
 
@@ -95,7 +107,7 @@ python remote_viewer.py --port 60000
 
 #### Local Viewer
 
-![local viewer](assets/local_viewer.png)
+![local viewer](media/local_viewer.png)
 
 After training, one can load and render the optimized 3D Gaussians with the local viewer
 
