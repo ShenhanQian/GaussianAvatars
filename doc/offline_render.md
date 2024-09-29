@@ -91,23 +91,23 @@ python render.py \
 Cross-identity reenactment with the `FREE` sequence of `TGT_SUBJECT`:
 
 ```shell
-SUBJECT=306
-TGT_SUBJECT=218
+SUBJECT=306  # the subject of a trained avatar
+TGT_SUBJECT=218  # the subject of a target motion
 
 python render.py \
--t data/${TGT_SUBJECT}_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
+-t data/${TGT_SUBJECT}_FREE_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
 --select_camera_id 8  # front view
 ```
 
 Cross-identity reenactment with 10 prescribed motion sequences of `TGT_SUBJECT`:
 
 ```shell
-SUBJECT=306
-TGT_SUBJECT=218
+SUBJECT=306  # the subject of a trained avatar
+TGT_SUBJECT=218  # the subject of a target motion
 
 python render.py \
--t data/UNION10_${TGT_SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
 -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
+-t data/UNION10_${TGT_SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
 --select_camera_id 8  # front view
 ```
