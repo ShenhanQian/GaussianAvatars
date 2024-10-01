@@ -111,3 +111,25 @@ python render.py \
 -t data/UNION10_${TGT_SUBJECT}_EMO1234EXP234589_v16_DS2-0.5x_lmkSTAR_teethV3_SMOOTH_offsetS_whiteBg_maskBelowLine \
 --select_camera_id 8  # front view
 ```
+
+### FPS Benchmark
+
+To benchmark rendering FPS directly with our demo avatar, run
+
+```shell
+SUBJECT=306
+
+python fps_benchmark_demo.py --point_path media/306/point_cloud.ply \
+--height 802 --width 550 --n_iter 500 --vis
+```
+
+To benchmark rendering FPS with the original dataset, run
+
+```shell
+SUBJECT=306
+
+python fps_benchmark_dataset.py -m output/UNION10EMOEXP_${SUBJECT}_eval_600k \
+--skip_val --skip_test --n_iter 500 --vis
+```
+
+> **NOTE:** To avoid the influence of I/O, we only read the first view of each split and repeatedly render the same view for `n_iter` times.
