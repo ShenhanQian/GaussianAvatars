@@ -96,8 +96,7 @@ class LocalViewer(Mini3DViewer):
 
     def init_gaussians(self):
         # load gaussians
-        motion_path = Path(self.cfg.point_path).parent / "flame_param.npz"
-        if motion_path.exists():
+        if (Path(self.cfg.point_path).parent / "flame_param.npz").exists():
             self.gaussians = FlameGaussianModel(self.cfg.sh_degree)
         else:
             self.gaussians = GaussianModel(self.cfg.sh_degree)

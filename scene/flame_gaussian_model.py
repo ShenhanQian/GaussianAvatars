@@ -242,12 +242,19 @@ class FlameGaussianModel(GaussianModel):
             flame_param = np.load(str(motion_path))
             flame_param = {k: torch.from_numpy(v).cuda() for k, v in flame_param.items() if v.dtype == np.float32}
 
-            self.flame_param['translation'] = flame_param['translation']
-            self.flame_param['rotation'] = flame_param['rotation']
-            self.flame_param['neck_pose'] = flame_param['neck_pose']
-            self.flame_param['jaw_pose'] = flame_param['jaw_pose']
-            self.flame_param['eyes_pose'] = flame_param['eyes_pose']
-            self.flame_param['expr'] = flame_param['expr']
+            self.flame_param = {
+                # keep the static parameters
+                'shape': self.flame_param['shape'],
+                'static_offset': self.flame_param['static_offset'],
+                # update the dynamic parameters
+                'translation': flame_param['translation'],
+                'rotation': flame_param['rotation'],
+                'neck_pose': flame_param['neck_pose'],
+                'jaw_pose': flame_param['jaw_pose'],
+                'eyes_pose': flame_param['eyes_pose'],
+                'expr': flame_param['expr'],
+                'dynamic_offset': flame_param['dynamic_offset'],
+            }
             self.num_timesteps = self.flame_param['expr'].shape[0]  # required by viewers
         
         if 'disable_fid' in kwargs and len(kwargs['disable_fid']) > 0:
