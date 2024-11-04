@@ -18,7 +18,7 @@ from scene.cameras import MiniCam
 class NVDiffRenderer(torch.nn.Module):
     def __init__(
             self,
-            use_opengl: bool = True, 
+            use_opengl: bool = False, 
             lighting_type: Literal['constant', 'front'] = 'front',
             lighting_space: Literal['camera', 'world'] = 'camera',
         ):
