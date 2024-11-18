@@ -86,7 +86,8 @@ python train.py \
 
 </details>
 
-> **NOTE:** During training, a complete evaluation are conducted on both the validation set (novel-view synthesis) and test set (self-reenactment) every `--interval` iterations. You can check the metrics in the commandline or Tensorboard. The metrics are computed on all images, although we only save partial images in Tensorboard.
+> [!NOTE]
+> During training, a complete evaluation are conducted on both the validation set (novel-view synthesis) and test set (self-reenactment) every `--interval` iterations. You can check the metrics in the commandline or Tensorboard. The metrics are computed on all images, although we only save partial images in Tensorboard.
 
 ### 2. Interactive Viewers
 
@@ -100,7 +101,7 @@ During training, one can monitor the training progress with the remote viewer
 python remote_viewer.py --port 60000
 ```
 
-> **NOTE:**
+> [!NOTE]
 > - The remote viewer can slow down training a lot. You may want to close it or check "pause rendering" when not viewing.
 >
 > - The viewer could get frozen and disconnected the first time you enable "show mesh". You can try switching it on and off or simply wait for a few seconds.
@@ -139,10 +140,11 @@ python local_viewer.py \
 
 If you find our paper or code useful in your research, please cite with the following BibTeX entry:
 ```bibtex
-@article{qian2023gaussianavatars,
-  title={GaussianAvatars: Photorealistic Head Avatars with Rigged 3D Gaussians},
+@inproceedings{qian2024gaussianavatars,
+  title={Gaussianavatars: Photorealistic head avatars with rigged 3d gaussians},
   author={Qian, Shenhan and Kirschstein, Tobias and Schoneveld, Liam and Davoli, Davide and Giebenhain, Simon and Nie{\ss}ner, Matthias},
-  journal={arXiv preprint arXiv:2312.02069},
-  year={2023}
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={20299--20309},
+  year={2024}
 }
 ```
