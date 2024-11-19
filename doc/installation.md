@@ -91,6 +91,6 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu117
 conda install pytorch torchvision pytorch-cuda=11.7 -c pytorch -c nvidia
 # make sure torch.cuda.is_available() returns True
 
-# Install the rest packages (can take a while to compile diff-gaussian-rasterization, simple-knn, and nvdiffrast)
+# Install the rest packages (can take a while to compile gsplat, simple-knn)
 pip install -r requirements.txt
 ```

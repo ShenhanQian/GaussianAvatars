@@ -196,20 +196,11 @@ class NVDiffRenderer(torch.nn.Module):
         full_proj_transform[:,1] = -full_proj_transform[:,1]
         full_proj = full_proj_transform.T[None, ...].to(verts)
 
-        if self.use_opengl:
-            image_size = cam.image_height, cam.image_width
-            
+        image_size = cam.image_height, cam.image_width
+        try:
             return self.render_mesh(verts, faces, RT, full_proj, image_size, background_color, face_colors)
-        else:
-            if cam.image_height > 2048 or cam.image_width > 2048:
-                image_size = 2048, 2048
-            else:
-                image_size = int(cam.image_height // 8 * 8), int(cam.image_width // 8 * 8)
-
-            output = self.render_mesh(verts, faces, RT, full_proj, image_size, background_color, face_colors)
-            for k, v in output.items():
-                output[k] = F.interpolate(v.permute(0, 3, 1, 2), (cam.image_height, cam.image_width), mode='bilinear').permute(0, 2, 3, 1)
-            return output
+        except Exception as e:
+            print(f"Error rendering mesh: {e}")
     
     def render_mesh(
         self, verts, faces, RT, full_proj, image_size, background_color=[1., 1., 1.],

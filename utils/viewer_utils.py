@@ -67,6 +67,7 @@ def projection_from_intrinsics(K: np.ndarray, image_size: Tuple[int], near: floa
 
     if flip_y:
         proj[:, 1, 1] *= -1
+        proj[:, 1, 2] *= -1
     return proj
 
 

@@ -27,6 +27,11 @@ def prepare_camera(width, height):
         FoVy = float(np.radians(cam.fovy))
         image_height = cam.image_height
         image_width = cam.image_width
+        fx = image_width / (2 * np.tan(FoVx / 2))
+        fy = image_height / (2 * np.tan(FoVy / 2))
+        cx = image_width / 2
+        cy = image_height / 2
+        K = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=torch.float32)
         world_view_transform = torch.tensor(cam.world_view_transform).float().cuda().T  # the transpose is required by gaussian splatting rasterizer
         full_proj_transform = torch.tensor(cam.full_proj_transform).float().cuda().T  # the transpose is required by gaussian splatting rasterizer
         camera_center = torch.tensor(cam.pose[:3, 3]).cuda()

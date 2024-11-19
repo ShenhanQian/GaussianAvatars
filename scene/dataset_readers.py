@@ -36,6 +36,7 @@ class CameraInfo(NamedTuple):
     width: int
     height: int
     bg: np.array = np.array([0, 0, 0])
+    K: Optional[np.array] = None
     timestep: Optional[int] = None
     camera_id: Optional[int] = None
 
@@ -191,8 +192,8 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
 
     with open(os.path.join(path, transformsfile)) as json_file:
         contents = json.load(json_file)
-        if 'camera_angle_x' in contents:
-            fovx_shared = contents["camera_angle_x"]
+        fovx_shared = contents["camera_angle_x"] if 'camera_angle_x' in contents else None
+        fovy_shared = contents["camera_angle_y"] if 'camera_angle_y' in contents else None
 
         frames = contents["frames"]
         for idx, frame in tqdm(enumerate(frames), total=len(frames)):
@@ -228,19 +229,21 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
                 image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
                 width, height = image.size
 
-            if 'camera_angle_x' in frame:
-                fovx = frame["camera_angle_x"]
-            else:
-                fovx = fovx_shared
-            fovy = focal2fov(fov2focal(fovx, width), height)
-
+            fovx = frame["camera_angle_x"] if 'camera_angle_x' in frame else fovx_shared
+            fovy = frame["camera_angle_y"] if 'camera_angle_y' in frame else fovy_shared
+            fx = width / 2 / np.tan(fovx / 2)
+            fy = height / 2 / np.tan(fovy / 2)
+            cx = frame["cx"] if 'cx' in frame else width / 2
+            cy = frame["cy"] if 'cy' in frame else height / 2
+            K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+            
             timestep = frame["timestep_index"] if 'timestep_index' in frame else None
             camera_id = frame["camera_index"] if 'camera_id' in frame else None
             
             cam_infos.append(CameraInfo(
                 uid=idx, R=R, T=T, FovY=fovy, FovX=fovx, bg=bg, image=image, 
                 image_path=image_path, image_name=image_name, 
-                width=width, height=height, 
+                width=width, height=height, K=K,
                 timestep=timestep, camera_id=camera_id))
     return cam_infos
 
