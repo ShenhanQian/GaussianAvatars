@@ -143,7 +143,8 @@ class RemoteViewer(Mini3DViewer):
                 if dpg.get_value('_checkbox_show_splatting') or dpg.get_value('_checkbox_show_mesh'):
                     img = self.receive_image(self.cam.image_height, self.cam.image_width, 3)
                     self.render_buffer = img.astype(np.float32) / 255.0
-                    dpg.set_value("_texture", self.render_buffer)
+                    if img.shape[0] == self.cam.image_height and img.shape[1] == self.cam.image_width:
+                        dpg.set_value("_texture", self.render_buffer)
 
                 self.receive_json()
                 self.refresh_stat()

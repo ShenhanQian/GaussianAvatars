@@ -232,6 +232,13 @@ class Mini3DViewer:
 
         # initialize GUI
         print("Initializing GUI...")
+
+        # disable GLVND patching on Linux to avoid segmentation fault when deleting texture
+        import platform
+        import os
+        if platform.system().upper() == "LINUX":
+            os.environ["__GLVND_DISALLOW_PATCHING"] = "1"
+
         dpg.create_context()
         self.define_gui()
         self.register_callbacks()
@@ -267,7 +274,7 @@ class Mini3DViewer:
             self.H = app_data[1]
             self.cam.image_width = self.W
             self.cam.image_height = self.H
-            self.render_buffer = np.zeros((self.H, self.W, 3), dtype=np.float32)
+            self.render_buffer = np.ones((self.W, self.H, 3), dtype=np.float32)
 
             # delete and re-add the texture and image
             dpg.delete_item("_texture")
@@ -277,6 +284,7 @@ class Mini3DViewer:
                 dpg.add_raw_texture(self.W, self.H, self.render_buffer, format=dpg.mvFormat_Float_rgb, tag="_texture")
             dpg.add_image("_texture", width=self.W, height=self.H, tag="_image", parent="_canvas_window")
             dpg.configure_item("_canvas_window", width=self.W, height=self.H)
+            self.need_update = True
         
         def callback_mouse_move(sender, app_data):
             self.cursor_x, self.cursor_y = app_data

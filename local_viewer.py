@@ -623,7 +623,6 @@ class LocalViewer(Mini3DViewer):
         while dpg.is_dearpygui_running():
 
             if self.need_update or self.playing:
-                self.rendering = True
                 cam = self.prepare_camera()
 
                 if dpg.get_value("_checkbox_show_splatting"):
@@ -653,10 +652,11 @@ class LocalViewer(Mini3DViewer):
                     rgb = torch.ones([self.H, self.W, 3])
 
                 self.render_buffer = rgb.cpu().numpy()
+                if self.render_buffer.shape[0] != self.H or self.render_buffer.shape[1] != self.W:
+                    continue
                 dpg.set_value("_texture", self.render_buffer)
 
                 self.refresh_stat()
-                self.rendering = False
                 self.need_update = False
 
                 if self.playing:
