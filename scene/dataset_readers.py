@@ -194,6 +194,8 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
         contents = json.load(json_file)
         fovx_shared = contents["camera_angle_x"] if 'camera_angle_x' in contents else None
         fovy_shared = contents["camera_angle_y"] if 'camera_angle_y' in contents else None
+        cx_shared = contents["cx"] if 'cx' in contents else None
+        cy_shared = contents["cy"] if 'cy' in contents else None
 
         frames = contents["frames"]
         for idx, frame in tqdm(enumerate(frames), total=len(frames)):
@@ -233,8 +235,10 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             fovy = frame["camera_angle_y"] if 'camera_angle_y' in frame else fovy_shared
             fx = width / 2 / np.tan(fovx / 2)
             fy = height / 2 / np.tan(fovy / 2)
-            cx = frame["cx"] if 'cx' in frame else width / 2
-            cy = frame["cy"] if 'cy' in frame else height / 2
+            cx = frame["cx"] if 'cx' in frame else cx_shared
+            cy = frame["cy"] if 'cy' in frame else cy_shared
+            # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
+            cy = height - cy
             K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
             
             timestep = frame["timestep_index"] if 'timestep_index' in frame else None
