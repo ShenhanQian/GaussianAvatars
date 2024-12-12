@@ -184,6 +184,15 @@ class OrbitCamera:
         rotvec_z = axis_z * angle_z
         self.rot = R.from_rotvec(rotvec_z) * self.rot
 
+    def trackball(self, p, q, rot_begin=None):
+        axis = np.cross(p, q)
+        angle = np.arccos(np.dot(p, q))
+        rotvec = axis * angle
+        if rot_begin is None:
+            self.rot = self.rot * R.from_rotvec(rotvec)
+        else:
+            self.rot = rot_begin * R.from_rotvec(rotvec)
+
     def scale(self, delta):
         self.radius *= 1.1 ** (-delta)
 
@@ -300,23 +309,34 @@ class Mini3DViewer:
                 
                 # drag with left button
                 if self.drag_button is dpg.mvMouseButton_Left:
-                    k = 0.1
-                    # rotate around X&Y axis
-                    if self.W*k < self.drag_begin_x < self.W*(1-k) and self.H*k < self.drag_begin_y < self.H*(1-k):
-                        angle_x = np.radians(-0.3 * (self.cursor_y - cursor_y_prev))
-                        self.cam.orbit_x(angle_x)
-                        
-                        angle_y = np.radians(-0.3 * (self.cursor_x - cursor_x_prev))
-                        self.cam.orbit_y(angle_y)
+                    cx = self.W // 2
+                    cy = self.H // 2
+                    r = min(cx, cy) * 0.9
+                    # rotate with trackball: https://raw.org/code/trackball-rotation-using-quaternions/
+                    if (self.drag_begin_x - cx)**2 + (self.drag_begin_y - cy)**2 < r**2:
+                        px, py = -(self.drag_begin_x - cx)/r, (self.drag_begin_y - cy)/r
+                        px2y2 = px**2 + py**2
+                        # p = np.array([px, py, np.sqrt(max(1 - px2y2, 0))])
+                        p = np.array([px, py, np.sqrt(1e-6+max(1 - px2y2, 0.25/px2y2))])
+                        p /= np.linalg.norm(p)
+
+                        qx, qy = -(self.cursor_x - cx)/r, (self.cursor_y - cy)/r
+                        qx2y2 = qx**2 + qy**2
+                        # q = np.array([qx, qy, np.sqrt(max(1 - qx2y2, 0))])
+                        q = np.array([qx, qy, np.sqrt(1e-6+max(1 - qx2y2, 0.25/qx2y2))])
+                        q /= np.linalg.norm(q)
+
+                        self.cam.trackball(p, q, rot_begin=self.cam_rot_begin)
+
                     # rotate around Z axis
                     else:
-                        xy_begin = np.array([self.cursor_x_prev - self.W//2, self.cursor_y_prev - self.H//2])
-                        xy_end = np.array([self.cursor_x - self.W//2, self.cursor_y - self.H//2])
+                        xy_begin = np.array([cursor_x_prev - cx, cursor_y_prev - cy])
+                        xy_end = np.array([self.cursor_x - cx, self.cursor_y - cy])
                         angle_z = np.arctan2(xy_end[1], xy_end[0]) - np.arctan2(xy_begin[1], xy_begin[0])
                         self.cam.orbit_z(angle_z)
                 
                 # drag with middle button
-                elif self.drag_button is dpg.mvMouseButton_Middle:
+                elif self.drag_button is dpg.mvMouseButton_Middle or self.drag_button is dpg.mvMouseButton_Right:
                     # Pan in X-Y plane
                     self.cam.pan(dx=self.cursor_x - cursor_x_prev, dy=self.cursor_y - cursor_y_prev)
                 self.need_update = True
@@ -331,6 +351,7 @@ class Mini3DViewer:
                 self.drag_begin_x = self.cursor_x
                 self.drag_begin_y = self.cursor_y
                 self.drag_button = app_data[0]
+                self.cam_rot_begin = self.cam.rot
         
         def callback_mouse_release(sender, app_data):
             self.drag_begin_x = None
@@ -338,6 +359,7 @@ class Mini3DViewer:
             self.drag_button = None
             self.cursor_x_prev = None
             self.cursor_y_prev = None
+            self.cam_rot_begin = None
 
         def callback_mouse_wheel(sender, app_data):
             delta = app_data
