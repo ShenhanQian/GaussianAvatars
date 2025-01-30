@@ -34,8 +34,12 @@ FLAME_LMK_PATH = "flame_model/assets/flame/landmark_embedding_with_eyes.npy"
 
 # to be downloaded from https://flame.is.tue.mpg.de/download.php
 # FLAME_MODEL_PATH = "flame_model/assets/flame/generic_model.pkl"  # FLAME 2020
-FLAME_MODEL_PATH = "flame_model/assets/flame/flame2023.pkl"  # FLAME 2023 (versions w/ jaw rotation)
+# FLAME_MODEL_PATH = "flame_model/assets/flame/flame2023.pkl"  # FLAME 2023 (versions w/ jaw rotation)
+FLAME_MODEL_PATH = "flame_model/assets/flame/generic_model.pkl"  # FLAME 2023 (versions w/ jaw rotation)
 FLAME_PARTS_PATH = "flame_model/assets/flame/FLAME_masks.pkl" # FLAME Vertex Masks
+
+# Load the transform matrix
+BLENDSHAPE_TRANSFORM_MATRIX = np.load("flame_model/assets/flame/mat_blendshapes.npy")
 
 def to_tensor(array, dtype=torch.float32):
     if "torch.tensor" not in str(type(array)):
@@ -922,6 +926,56 @@ class FlameMask(nn.Module):
         combined = torch.cat((fids, face_idx))
         uniques, counts = combined.unique(return_counts=True)
         return uniques[counts == 1]
+
+    # def convert_blendshapes_to_expressions(self, blendshapes):
+    #     """
+    #     Convert a set of 51 blendshapes into expressions given the transform matrix.
+
+    #     Parameters:
+    #     blendshapes (np.ndarray): The blendshapes array of shape (51,).
+    #     transform_matrix_path (str): The path to the transform matrix .npy file.
+
+    #     Returns:
+    #     torch.Tensor: The expressions tensor.
+    #     """
+        
+
+    #     # Ensure the blendshapes are a numpy array
+    #     blendshapes = np.array(blendshapes)
+
+    #     # Apply the transform matrix to the blendshapes
+    #     expressions = np.dot(BLENDSHAPE_TRANSFORM_MATRIX, blendshapes)
+
+    #     # Convert the expressions to a tensor
+    #     expressions_tensor = to_tensor(expressions, dtype=self.dtype)
+
+    #     return expressions_tensor
+
+    def convert_blendshapes_to_expressions(self, blendshapes):
+        """
+        Convert ARKit blendshapes into FLAME expressions using the transformation matrix W.
+        W maps from ARKit's 51 blendshape space to FLAME's expression space.
+        
+        Parameters:
+        blendshapes (np.ndarray): The ARKit blendshapes array of shape (51,).
+        
+        Returns:
+        torch.Tensor: The FLAME expression parameters tensor of shape (100,) - expression parameters only.
+        """
+        # Ensure the blendshapes are a numpy array 
+        blendshapes = np.array(blendshapes, dtype=np.float32)
+        
+        # Need to transpose BLENDSHAPE_TRANSFORM_MATRIX since it's stored as (103, 51)
+        # After transpose: (51, 103) @ (51,) -> (103,)
+        flame_params = BLENDSHAPE_TRANSFORM_MATRIX.T @ blendshapes
+        
+        # Remove the last 3 jaw parameters, keeping only expression parameters
+        expressions = flame_params[:-3]
+        
+        # Convert to tensor with correct dtype 
+        expressions_tensor = to_tensor(expressions, dtype=torch.float32)
+
+        return expressions_tensor
 
 
 if __name__ == '__main__':

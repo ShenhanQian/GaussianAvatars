@@ -61,6 +61,21 @@ class Config(Mini3DViewerConfig):
     demo_mode: bool = False
     """The UI will be simplified in demo mode."""
 
+ARKit_BLENDSHAPE_NAMES = [
+    "browDown_L", "browDown_R", "browInnerUp", "browOuterUp_L", "browOuterUp_R",
+    "cheekPuff", "cheekSquint_L", "cheekSquint_R", "eyeBlink_L", "eyeBlink_R",
+    "eyeLookDown_L", "eyeLookDown_R", "eyeLookIn_L", "eyeLookIn_R", "eyeLookOut_L",
+    "eyeLookOut_R", "eyeLookUp_L", "eyeLookUp_R", "eyeSquint_L", "eyeSquint_R",
+    "eyeWide_L", "eyeWide_R", "jawForward", "jawLeft", "jawOpen", "jawRight",
+    "mouthClose", "mouthDimple_L", "mouthDimple_R", "mouthFrown_L", "mouthFrown_R",
+    "mouthFunnel", "mouthLeft", "mouthLowerDown_L", "mouthLowerDown_R", "mouthPress_L",
+    "mouthPress_R", "mouthPucker", "mouthRight", "mouthRollLower", "mouthRollUpper",
+    "mouthShrugLower", "mouthShrugUpper", "mouthSmile_L", "mouthSmile_R", "mouthStretch_L",
+    "mouthStretch_R", "mouthUpperUp_L", "mouthUpperUp_R", "noseSneer_L", "noseSneer_R"
+    #"tongueOut"
+]
+
+
 class LocalViewer(Mini3DViewer):
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -73,6 +88,8 @@ class LocalViewer(Mini3DViewer):
 
         print("Initializing 3D Gaussians...")
         self.init_gaussians()
+
+
 
         if self.gaussians.binding is not None:
             # rendering settings
@@ -93,6 +110,105 @@ class LocalViewer(Mini3DViewer):
             dpg.configure_item("_slider_timestep", max_value=self.num_timesteps - 1)
 
             self.gaussians.select_mesh_by_timestep(self.timestep)
+
+        self.blendshape_values = {name: 0.0 for name in ARKit_BLENDSHAPE_NAMES}
+        self.expr_enabled = False
+        self.create_blendshape_sliders()
+
+    def create_blendshape_sliders(self):
+        with dpg.window(label="ARKit Blendshapes", tag="_blendshape_window", autosize=True, pos=(self.W-300, self.H//2)):
+            # Add reset button
+            dpg.add_button(label="Reset Blendshapes", callback=lambda: self.reset_blendshapes())
+            
+            # Add sliders grouped by region
+            regions = {
+                "Brows": ["browDown_L", "browDown_R", "browInnerUp", "browOuterUp_L", "browOuterUp_R"],
+                "Eyes": ["eyeBlink_L", "eyeBlink_R", "eyeLookDown_L", "eyeLookDown_R", 
+                        "eyeLookIn_L", "eyeLookIn_R", "eyeLookOut_L", "eyeLookOut_R", 
+                        "eyeLookUp_L", "eyeLookUp_R", "eyeSquint_L", "eyeSquint_R",
+                        "eyeWide_L", "eyeWide_R"],
+                "Cheeks": ["cheekPuff", "cheekSquint_L", "cheekSquint_R"],
+                "Jaw": ["jawForward", "jawLeft", "jawOpen", "jawRight"],
+                "Mouth": ["mouthClose", "mouthDimple_L", "mouthDimple_R", "mouthFrown_L", "mouthFrown_R",
+                        "mouthFunnel", "mouthLeft", "mouthLowerDown_L", "mouthLowerDown_R", 
+                        "mouthPress_L", "mouthPress_R", "mouthPucker", "mouthRight",
+                        "mouthRollLower", "mouthRollUpper", "mouthShrugLower", "mouthShrugUpper",
+                        "mouthSmile_L", "mouthSmile_R", "mouthStretch_L", "mouthStretch_R",
+                        "mouthUpperUp_L", "mouthUpperUp_R"],
+                "Nose": ["noseSneer_L", "noseSneer_R"]
+                # "Tongue": ["tongueOut"]
+            }
+            
+            for region, blendshapes in regions.items():
+                with dpg.collapsing_header(label=region, default_open=True):
+                    for blendshape in blendshapes:
+                        dpg.add_slider_float(
+                            label=blendshape,
+                            tag=f"_slider_{blendshape}",
+                            min_value=0.0,
+                            max_value=1.0,
+                            default_value=0.0,
+                            callback=self.on_blendshape_change,
+                            user_data=blendshape,
+                            width=250
+                        )
+
+    def on_blendshape_change(self, sender, app_data, user_data):
+        """Handle changes to blendshape sliders and update FLAME model"""
+        blendshape_name = user_data
+        blendshape_value = app_data
+        
+        # Update stored value
+        self.blendshape_values[blendshape_name] = blendshape_value
+        
+        # Convert blendshapes to array in correct order
+        blendshapes = np.array([self.blendshape_values[name] for name in ARKit_BLENDSHAPE_NAMES])
+        
+        # Convert to FLAME expressions
+        expressions = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)
+        
+        # Update FLAME parameters
+        self.flame_param['expr'] = expressions.unsqueeze(0)  # Add batch dimension
+        
+        # Enable expression control if not already enabled
+        if not dpg.get_value("_checkbox_enable_control"):
+            dpg.set_value("_checkbox_enable_control", True)
+        
+        # Update mesh with new parameters
+        self.gaussians.update_mesh_by_param_dict(self.flame_param)
+        self.need_update = True
+
+    def reset_blendshapes(self):
+        """Reset all blendshape values to 0"""
+        # Reset all sliders in UI
+        for name in ARKit_BLENDSHAPE_NAMES:
+            dpg.set_value(f"_slider_{name}", 0.0)
+            self.blendshape_values[name] = 0.0
+        
+        # Reset FLAME parameters
+        self.reset_flame_param()
+        if dpg.get_value("_checkbox_enable_control"):
+            self.gaussians.update_mesh_by_param_dict(self.flame_param)
+        self.need_update = True
+    # def create_blendshape_sliders(self):
+    #     with dpg.window(label="Blendshapes", tag="_blendshape_window", autosize=True, pos=(self.W-300, self.H//2)):
+    #         for blendshape in ARKit_BLENDSHAPE_NAMES:
+    #             dpg.add_slider_float(
+    #                 label=blendshape,
+    #                 min_value=0.0,
+    #                 max_value=1.0,
+    #                 default_value=0.0,
+    #                 callback=self.on_blendshape_change,
+    #                 user_data=blendshape,
+    #                 width=250
+    #             )
+
+    # def on_blendshape_change(self, sender, app_data, user_data):
+    #     blendshape_name = user_data
+    #     blendshape_value = app_data
+    #     # Update the blendshape value in your model
+    #     print(f"Blendshape {blendshape_name} changed to {blendshape_value}")
+    #     self.need_update = True
 
     def init_gaussians(self):
         # load gaussians
