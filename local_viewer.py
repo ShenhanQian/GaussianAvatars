@@ -46,7 +46,7 @@ class Config(Mini3DViewerConfig):
     """Path to the motion file (npz)"""
     sh_degree: int = 3
     """Spherical Harmonics degree"""
-    background_color: tuple[float] = (1., 1., 1.)
+    background_color: tuple[float,float,float] = (1., 1., 1.)
     """default GUI background color"""
     save_folder: Path = Path("./viewer_output")
     """default saving folder"""
