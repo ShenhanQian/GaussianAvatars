@@ -26,6 +26,8 @@ from gaussian_renderer import GaussianModel, FlameGaussianModel
 from gaussian_renderer import render
 from mesh_renderer import NVDiffRenderer
 
+from ros2_blendshape_node import main as ros2_main
+import threading
 
 @dataclass
 class PipelineConfig:
@@ -115,12 +117,19 @@ class LocalViewer(Mini3DViewer):
         self.expr_enabled = False
         self.create_blendshape_sliders()
 
+        self.need_update = False
+        ros2_thread = threading.Thread(target=ros2_main, args=(self,))
+        time.sleep(3)
+        ros2_thread.start()
+
+
+
     def create_blendshape_sliders(self):
         with dpg.window(label="ARKit Blendshapes", tag="_blendshape_window", autosize=True, pos=(self.W-300, self.H//2)):
             # Add reset button
             dpg.add_button(label="Reset Blendshapes", callback=lambda: self.reset_blendshapes())
             
-            # Add sliders grouped by region
+            # # Add sliders grouped by region
             regions = {
                 "Brows": ["browDown_L", "browDown_R", "browInnerUp", "browOuterUp_L", "browOuterUp_R"],
                 "Eyes": ["eyeBlink_L", "eyeBlink_R", "eyeLookDown_L", "eyeLookDown_R", 
@@ -138,6 +147,28 @@ class LocalViewer(Mini3DViewer):
                 "Nose": ["noseSneer_L", "noseSneer_R"]
                 # "Tongue": ["tongueOut"]
             }
+
+            # regions = {
+            #     "Brows": ["Brow Lowerer L", "Brow Lowerer R", "Inner Brow Raiser L", "Outer Brow Raiser L", "Outer Brow Raiser R"],
+                
+            #     "Eyes": ["Eyes Closed L", "Eyes Closed R", "Eyes Look Down L", "Eyes Look Down R",
+            #             "Eyes Look Left L", "Eyes Look Left R", "Eyes Look Right L", "Eyes Look Right R",
+            #             "Eyes Look Up L", "Eyes Look Up R", "Lid Tightener L", "Lid Tightener R",
+            #             "Upper Lid Raiser L", "Upper Lid Raiser R"],
+                        
+            #     "Cheeks": ["Cheek Puff L", "Cheek Raiser L", "Cheek Raiser R"],
+                
+            #     "Jaw": ["Jaw Thrust", "Jaw Sideways Left", "Jaw Drop", "Jaw Sideways Right"],
+                
+            #     "Mouth": ["Lips Toward", "Dimpler L", "Dimpler R", "Lip Corner Depressor L", "Lip Corner Depressor R",
+            #             "Lip Funneler LB", "Mouth Left", "Lower Lip Depressor L", "Lower Lip Depressor R",
+            #             "Lip Pressor L", "Lip Pressor R", "Lip Pucker L", "Mouth Right",
+            #             "Lip Suck LB", "Lip Suck LT", "Chin Raiser B", "Chin Raiser T",
+            #             "Lip Corner Puller L", "Lip Corner Puller R", "Lip Stretcher L", "Lip Stretcher R",
+            #             "Upper Lip Raiser L", "Upper Lip Raiser R"],
+                        
+            #     "Nose": ["Nose Wrinkler L", "Nose Wrinkler R"]
+            # }
             
             for region, blendshapes in regions.items():
                 with dpg.collapsing_header(label=region, default_open=True):
@@ -153,6 +184,27 @@ class LocalViewer(Mini3DViewer):
                             width=250
                         )
 
+    def update_blendshapes_from_ros(self, blendshape_data):
+        for name, value in blendshape_data.items():
+            if name in self.blendshape_values:
+                self.blendshape_values[name] = value
+                try:
+                    dpg.set_value(f"_slider_{name}", value)
+                except Exception as e:
+                    print(f"Error setting value for {name}: {e}")
+        self.update_flame_model()  # Ensure the FLAME model is updated
+
+    def update_flame_model(self):
+        blendshapes = np.array([self.blendshape_values[name] for name in ARKit_BLENDSHAPE_NAMES])
+        expressions = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)
+        self.flame_param['expr'] = expressions.unsqueeze(0)  # Add batch dimension
+
+        if not dpg.get_value("_checkbox_enable_control"):
+            dpg.set_value("_checkbox_enable_control", True)
+
+        self.gaussians.update_mesh_by_param_dict(self.flame_param)
+        self.need_update = True
+
     def on_blendshape_change(self, sender, app_data, user_data):
         """Handle changes to blendshape sliders and update FLAME model"""
         blendshape_name = user_data
@@ -160,36 +212,44 @@ class LocalViewer(Mini3DViewer):
         
         # Update stored value
         self.blendshape_values[blendshape_name] = blendshape_value
+
+        self.update_flame_model()
         
-        # Convert blendshapes to array in correct order
-        blendshapes = np.array([self.blendshape_values[name] for name in ARKit_BLENDSHAPE_NAMES])
+        # # Convert blendshapes to array in correct order
+        # blendshapes = np.array([self.blendshape_values[name] for name in ARKit_BLENDSHAPE_NAMES])
         
-        # Convert to FLAME expressions
-        expressions = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)
+        # # Convert to FLAME expressions
+        # expressions = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)
         
-        # Update FLAME parameters
-        self.flame_param['expr'] = expressions.unsqueeze(0)  # Add batch dimension
+        # # Update FLAME parameters
+        # self.flame_param['expr'] = expressions.unsqueeze(0)  # Add batch dimension
         
-        # Enable expression control if not already enabled
-        if not dpg.get_value("_checkbox_enable_control"):
-            dpg.set_value("_checkbox_enable_control", True)
+        # # Enable expression control if not already enabled
+        # if not dpg.get_value("_checkbox_enable_control"):
+        #     dpg.set_value("_checkbox_enable_control", True)
         
-        # Update mesh with new parameters
-        self.gaussians.update_mesh_by_param_dict(self.flame_param)
-        self.need_update = True
+        # # Update mesh with new parameters
+        # self.gaussians.update_mesh_by_param_dict(self.flame_param)
+        # self.need_update = True
 
     def reset_blendshapes(self):
-        """Reset all blendshape values to 0"""
-        # Reset all sliders in UI
         for name in ARKit_BLENDSHAPE_NAMES:
             dpg.set_value(f"_slider_{name}", 0.0)
             self.blendshape_values[name] = 0.0
+        self.update_flame_model()
+
+        # """Reset all blendshape values to 0"""
+        # # Reset all sliders in UI
+        # for name in ARKit_BLENDSHAPE_NAMES:
+        #     dpg.set_value(f"_slider_{name}", 0.0)
+        #     self.blendshape_values[name] = 0.0
         
-        # Reset FLAME parameters
-        self.reset_flame_param()
-        if dpg.get_value("_checkbox_enable_control"):
-            self.gaussians.update_mesh_by_param_dict(self.flame_param)
-        self.need_update = True
+        # # Reset FLAME parameters
+        # self.reset_flame_param()
+        # if dpg.get_value("_checkbox_enable_control"):
+        #     self.gaussians.update_mesh_by_param_dict(self.flame_param)
+        # self.need_update = True
+
     # def create_blendshape_sliders(self):
     #     with dpg.window(label="Blendshapes", tag="_blendshape_window", autosize=True, pos=(self.W-300, self.H//2)):
     #         for blendshape in ARKit_BLENDSHAPE_NAMES:
