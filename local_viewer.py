@@ -196,13 +196,16 @@ class LocalViewer(Mini3DViewer):
 
     def update_flame_model(self):
         blendshapes = np.array([self.blendshape_values[name] for name in ARKit_BLENDSHAPE_NAMES])
-        expressions = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)
+        expressions, jaw = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)
         self.flame_param['expr'] = expressions.unsqueeze(0)  # Add batch dimension
+        for i in range(len(jaw)): self.flame_param['jaw'][0, i] = jaw[i]
 
         if not dpg.get_value("_checkbox_enable_control"):
             dpg.set_value("_checkbox_enable_control", True)
 
         self.gaussians.update_mesh_by_param_dict(self.flame_param)
+
+
         self.need_update = True
 
     def on_blendshape_change(self, sender, app_data, user_data):

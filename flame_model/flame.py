@@ -33,9 +33,10 @@ FLAME_MESH_PATH = "flame_model/assets/flame/head_template_mesh.obj"
 FLAME_LMK_PATH = "flame_model/assets/flame/landmark_embedding_with_eyes.npy"
 
 # to be downloaded from https://flame.is.tue.mpg.de/download.php
-# FLAME_MODEL_PATH = "flame_model/assets/flame/generic_model.pkl"  # FLAME 2020
+FLAME_MODEL_PATH = "flame_model/assets/flame/generic_model.pkl"  # FLAME 2020
 # FLAME_MODEL_PATH = "flame_model/assets/flame/flame2023.pkl"  # FLAME 2023 (versions w/ jaw rotation)
-FLAME_MODEL_PATH = "flame_model/assets/flame/generic_model.pkl"  # FLAME 2020 
+# FLAME_MODEL_PATH = "flame_model/assets/flame/flame2023.pkl"  # FLAME 2023 (versions w/ jaw rotation)
+# FLAME_MODEL_PATH = "flame_model/assets/flame/generic_model.pkl"  # FLAME 2020 
 FLAME_PARTS_PATH = "flame_model/assets/flame/FLAME_masks.pkl" # FLAME Vertex Masks
 
 # Load the transform matrix
@@ -971,11 +972,13 @@ class FlameMask(nn.Module):
         
         # Remove the last 3 jaw parameters, keeping only expression parameters
         expressions = flame_params[:-3]
+        jaw = flame_params[-3:]
         
         # Convert to tensor with correct dtype 
         expressions_tensor = to_tensor(expressions, dtype=torch.float32)
+        jaw_tensor = to_tensor(jaw, dtype=torch.float32)
 
-        return expressions_tensor
+        return expressions_tensor, jaw_tensor
 
 
 if __name__ == '__main__':
