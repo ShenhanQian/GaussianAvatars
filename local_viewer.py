@@ -207,6 +207,15 @@ class LocalViewer(Mini3DViewer):
                     print(f"Error setting value for {name}: {e}")
         self.update_flame_model()  # Ensure the FLAME model is updated
 
+    def update_eyes_from_ros(self, eyes_data):
+        try:
+            dpg.set_value("_slider-eyes-x", eyes_data[0])
+            dpg.set_value("_slider-eyes-y", eyes_data[1])
+        except Exception as e:
+            print(f"Failed to set eye values: {e}") 
+        
+
+
     def update_flame_model(self):
         blendshapes = np.array([self.blendshape_values[name] for name in ARKit_BLENDSHAPE_NAMES])
         expressions, jaw = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)

@@ -122,6 +122,7 @@ class ROS2Subscriber(Node):
         self.viewer = viewer
 
         self.blendshape_data = None
+        self.eyes_data = None
         
         # Initialize time tracking
         self.last_msg_time = self.get_clock().now()
@@ -130,7 +131,7 @@ class ROS2Subscriber(Node):
         self.subscription = self.create_subscription(
             JointState,
             '/operator/face/expressions',
-            self.callback,
+            self.expressions_callback,
             1
         )
 
@@ -147,6 +148,14 @@ class ROS2Subscriber(Node):
             self.name_callback,
             1)
 
+        self.create_timer(1/60.0, self.timer_callback)
+
+    def timer_callback(self):
+        if self.eyes_data is not None:
+            self.viewer.update_eyes_from_ros(self.eyes_data)
+        
+        if self.blendshape_data is not None:
+            self.viewer.update_blendshapes_from_ros(self.blendshape_data)
 
     def presence_callback(self, msg):
         self.viewer.toggle_splatting(msg.data)
@@ -155,24 +164,9 @@ class ROS2Subscriber(Node):
         self.viewer.unload_avatar()
         self.viewer.load_avatar(f"{AVATAR_PATH}/{msg.data}")
 
-    def callback(self, msg):
-        current_time = self.get_clock().now()
-        if (current_time - self.last_msg_time).nanoseconds / 1e9 >= self.desired_period:
-            self.get_logger().info('Received blendshape message:', throttle_duration_sec=1)
-            self.blendshape_data = {}
-            for index, value in zip(msg.name, msg.position):
-                mapping = OVR_ARKIT_BLENDSHAPES_MAP.get(index, (index, 1.0))  # Default weight is 1.0
-                blendshape_name, weight = mapping
-                normalized_value = (value/100.0) * weight
-                self.blendshape_data[blendshape_name] = normalized_value
-            self.viewer.update_blendshapes_from_ros(self.blendshape_data)
-            self.get_logger().info(f"{list(self.blendshape_data.keys())[0]}: {list(self.blendshape_data.values())[0]}", throttle_duration_sec=1)
-            self.last_msg_time = current_time
-
-    def eye_callback(self, msg):
-        self.eyes_data = [msg.po]
-
     def expressions_callback(self, msg):
+        # current_time = self.get_clock().now()
+        # if (current_time - self.last_msg_time).nanoseconds / 1e9 >= self.desired_period:
         self.get_logger().info('Received blendshape message:', throttle_duration_sec=1)
         self.blendshape_data = {}
         for index, value in zip(msg.name, msg.position):
@@ -180,6 +174,21 @@ class ROS2Subscriber(Node):
             blendshape_name, weight = mapping
             normalized_value = (value/100.0) * weight
             self.blendshape_data[blendshape_name] = normalized_value
+        # self.viewer.update_blendshapes_from_ros(self.blendshape_data)
+        self.get_logger().info(f"{list(self.blendshape_data.keys())[0]}: {list(self.blendshape_data.values())[0]}", throttle_duration_sec=1)
+        # self.last_msg_time = current_time
+
+    def eye_callback(self, msg):
+        self.eyes_data = [msg.pose.position.x / 100.0, msg.pose.position.y / 100.0]
+
+    # def expressions_callback(self, msg):
+    #     self.get_logger().info('Received blendshape message:', throttle_duration_sec=1)
+    #     self.blendshape_data = {}
+    #     for index, value in zip(msg.name, msg.position):
+    #         mapping = OVR_ARKIT_BLENDSHAPES_MAP.get(index, (index, 1.0))  # Default weight is 1.0
+    #         blendshape_name, weight = mapping
+    #         normalized_value = (value/100.0) * weight
+    #         self.blendshape_data[blendshape_name] = normalized_value
 
 def main(viewer):
     rclpy.init()
