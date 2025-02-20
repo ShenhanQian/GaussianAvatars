@@ -1,6 +1,10 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import  Bool, String
+
+AVATAR_PATH = "/workspace/avatars/"
 
 OVR_ARKIT_BLENDSHAPES_MAP = {
     "19": ("jawOpen", 1.5),
@@ -121,7 +125,7 @@ class ROS2Subscriber(Node):
         
         # Initialize time tracking
         self.last_msg_time = self.get_clock().now()
-        self.desired_period = 1.0/12.0  # 5Hz = 0.2 seconds
+        self.desired_period = 1.0/60.0  # 5Hz = 0.2 seconds
         
         self.subscription = self.create_subscription(
             JointState,
@@ -129,6 +133,27 @@ class ROS2Subscriber(Node):
             self.callback,
             1
         )
+
+        self.presence_subscription = self.create_subscription(
+            Bool,
+            '/operator/presence',
+            self.presence_callback,
+            1
+        )
+
+        self.name_subscription = self.create_subscription(
+            String,
+            '/operator/name',
+            self.name_callback,
+            1)
+
+
+    def presence_callback(self, msg):
+        self.viewer.toggle_splatting(msg.data)
+
+    def name_callback(self, msg):
+        self.viewer.unload_avatar()
+        self.viewer.load_avatar(f"{AVATAR_PATH}/{msg.data}")
 
     def callback(self, msg):
         current_time = self.get_clock().now()
@@ -143,6 +168,9 @@ class ROS2Subscriber(Node):
             self.viewer.update_blendshapes_from_ros(self.blendshape_data)
             self.get_logger().info(f"{list(self.blendshape_data.keys())[0]}: {list(self.blendshape_data.values())[0]}", throttle_duration_sec=1)
             self.last_msg_time = current_time
+
+    def eye_callback(self, msg):
+        self.eyes_data = [msg.po]
 
     def expressions_callback(self, msg):
         self.get_logger().info('Received blendshape message:', throttle_duration_sec=1)
