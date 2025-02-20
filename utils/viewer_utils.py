@@ -16,6 +16,10 @@ import os
 from dataclasses import dataclass
 import dearpygui.dearpygui as dpg
 
+# from Xlib import display, X
+# import ctypes
+# import time
+
 
 def projection_from_intrinsics(K: np.ndarray, image_size: Tuple[int], near: float=0.01, far:float=10, flip_y: bool=False, z_sign=-1):
     """
@@ -71,7 +75,7 @@ def projection_from_intrinsics(K: np.ndarray, image_size: Tuple[int], near: floa
 
 
 class OrbitCamera:
-    def __init__(self, W, H, r=2, fovy=60, znear=0.01, zfar=10, convention: Literal["opengl", "opencv"]="opengl", save_path='camera.json'):
+    def __init__(self, W, H, r=0.1, fovy=60, znear=0.01, zfar=10, convention: Literal["opengl", "opencv"]="opengl", save_path='camera.json'):
         self.image_width = W
         self.image_height = H
         self.radius_default = r
@@ -203,9 +207,9 @@ class OrbitCamera:
 
 @dataclass
 class Mini3DViewerConfig:
-    W: int = 960
+    W: int = 768
     """GUI width"""
-    H: int = 540
+    H: int = 900
     """GUI height"""
     radius: float = 1
     """default GUI camera radius from center"""
@@ -251,9 +255,11 @@ class Mini3DViewer:
         dpg.create_context()
         self.define_gui()
         self.register_callbacks()
-        dpg.create_viewport(title=title, width=self.W, height=self.H, resizable=True)
+        dpg.create_viewport(title=title, width=self.W, height=self.H, resizable=True, always_on_top=True)
         dpg.setup_dearpygui()
         dpg.show_viewport()
+
+        # self.make_window_override_redirect()
 
     
     def __del__(self):
@@ -401,3 +407,20 @@ class Mini3DViewer:
             dpg.add_key_press_handler(dpg.mvKey_E, callback=callback_key_press, tag='_mvKey_E')
             dpg.add_key_press_handler(dpg.mvKey_Q, callback=callback_key_press, tag='_mvKey_Q')
 
+    def make_window_override_redirect(self):
+        # Wait a bit for the window to be created
+        time.sleep(0.1)
+        
+        # Get X display and window
+        d = display.Display()
+        w = d.create_resource_object('window', dpg.get_viewport_handler())
+        
+        # Set override redirect
+        w.set_attributes(override_redirect=True)
+        
+        # You might also need to remap the window
+        w.unmap()
+        w.map()
+        
+        # Make sure changes are applied
+        d.sync()
