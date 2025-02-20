@@ -122,10 +122,23 @@ class LocalViewer(Mini3DViewer):
         time.sleep(3)
         ros2_thread.start()
 
-
+    def toggle_splatting(self, value=None):
+        """
+        Toggle or set the splatting visibility
+        
+        Args:
+            value (bool, optional): If provided, set visibility to this value.
+                                  If None, toggle current visibility.
+        """
+        if value is None:
+            current_value = dpg.get_value("_checkbox_show_splatting")
+            dpg.set_value("_checkbox_show_splatting", not current_value)
+        else:
+            dpg.set_value("_checkbox_show_splatting", value)
+        self.need_update = True
 
     def create_blendshape_sliders(self):
-        with dpg.window(label="ARKit Blendshapes", tag="_blendshape_window", autosize=True, pos=(self.W-300, self.H//2)):
+        with dpg.window(label="ARKit Blendshapes", tag="_blendshape_window", autosize=True, pos=(self.W-300, self.H//2),show=not self.cfg.demo_mode):
             # Add reset button
             dpg.add_button(label="Reset Blendshapes", callback=lambda: self.reset_blendshapes())
             
@@ -272,6 +285,76 @@ class LocalViewer(Mini3DViewer):
     #     # Update the blendshape value in your model
     #     print(f"Blendshape {blendshape_name} changed to {blendshape_value}")
     #     self.need_update = True
+
+    def load_avatar(self, folder_path: Path):
+        """
+        Load a new avatar and update the viewer state
+        
+        Args:
+            folder_path (Path): Path to the folder containing the avatar files
+        """
+        # Find ply and motion files in the folder
+        folder_path = Path(folder_path)
+        ply_files = list(folder_path.glob("*.ply"))
+        if not ply_files:
+            raise FileNotFoundError(f'No .ply file found in {folder_path}')
+        point_path = ply_files[0]
+        
+        motion_path = None
+        motion_files = list(folder_path.glob("*.npz"))
+        if motion_files:
+            motion_path = motion_files[0]
+        
+        # Update config paths
+        self.cfg.point_path = point_path
+        self.cfg.motion_path = motion_path
+        
+        # Clear existing gaussians
+        if hasattr(self, 'gaussians'):
+            del self.gaussians
+            
+        # Initialize new gaussians
+        if (folder_path / "flame_param.npz").exists():
+            self.gaussians = FlameGaussianModel(self.cfg.sh_degree)
+        else:
+            self.gaussians = GaussianModel(self.cfg.sh_degree)
+
+        # Reset FLAME parameters if applicable
+        if self.gaussians.binding is not None:
+            self.reset_flame_param()
+            
+        # Load the new avatar
+        self.gaussians.load_ply(point_path, has_target=False, motion_path=motion_path, disable_fid=[])
+            
+        # Update UI elements
+        if self.gaussians.binding is not None:
+            self.num_timesteps = self.gaussians.num_timesteps
+            dpg.configure_item("_slider_timestep", max_value=self.num_timesteps - 1)
+            dpg.set_value("_slider_timestep", 0)
+            self.timestep = 0
+            self.gaussians.select_mesh_by_timestep(self.timestep)
+
+        # Force update
+        self.need_update = True
+
+    def unload_avatar(self):
+        """Unload the current avatar and clear related state"""
+        if hasattr(self, 'gaussians'):
+            del self.gaussians
+            self.gaussians = None
+            
+        self.num_timesteps = 1
+        self.timestep = 0
+        if dpg.does_item_exist("_slider_timestep"):
+            dpg.configure_item("_slider_timestep", max_value=0)
+            dpg.set_value("_slider_timestep", 0)
+        
+        # Clear the render buffer
+        self.render_buffer = np.zeros((self.H, self.W, 3))
+        if dpg.does_item_exist("_texture"):
+            dpg.set_value("_texture", self.render_buffer)
+                
+        self.need_update = True
 
     def init_gaussians(self):
         # load gaussians
@@ -480,7 +563,7 @@ class LocalViewer(Mini3DViewer):
         super().define_gui()
 
         # window: rendering options ==================================================================================================
-        with dpg.window(label="Render", tag="_render_window", autosize=True):
+        with dpg.window(label="Render", tag="_render_window", autosize=True,  show=not self.cfg.demo_mode):
 
             with dpg.group(horizontal=True):
                 dpg.add_text("FPS:", show=not self.cfg.demo_mode)
@@ -607,7 +690,7 @@ class LocalViewer(Mini3DViewer):
                 dpg.add_button(label="clear cache", tag="_button_clear_cache", callback=callback_clear_cache, show=not self.cfg.demo_mode)
                 
         # window: recording ==================================================================================================
-        with dpg.window(label="Record", tag="_record_window", autosize=True, pos=(0, self.H//2)):
+        with dpg.window(label="Record", tag="_record_window", autosize=True, pos=(0, self.H//2), show=not self.cfg.demo_mode):
             dpg.add_text("Keyframes")
             with dpg.group(horizontal=True):
                 # list keyframes
@@ -706,7 +789,7 @@ class LocalViewer(Mini3DViewer):
 
         # window: FLAME ==================================================================================================
         if self.gaussians.binding is not None:
-            with dpg.window(label="FLAME parameters", tag="_flame_window", autosize=True, pos=(self.W-300, 0)):
+            with dpg.window(label="FLAME parameters", tag="_flame_window", autosize=True, pos=(self.W-300, 0),show=not self.cfg.demo_mode):
                 def callback_enable_control(sender, app_data):
                     if app_data:
                         self.gaussians.update_mesh_by_param_dict(self.flame_param)
@@ -783,6 +866,25 @@ class LocalViewer(Mini3DViewer):
                     self.need_update = True
             dpg.add_mouse_wheel_handler(callback=callbackmouse_wheel_slider)
 
+            def callback_toggle_splatting(sender, app_data):
+                self.toggle_splatting()
+            dpg.add_key_press_handler(dpg.mvKey_S, callback=callback_toggle_splatting)
+
+            def callback_load_alona(sender, app_data):
+                self.unload_avatar()
+                # To load a new avatar:
+                self.load_avatar(Path("/workspace/avatars/alona5/"))
+
+            def callback_load_tatjana(sender, app_data):
+                self.unload_avatar()
+                # To load a new avatar:
+                self.load_avatar(Path("/workspace/avatars/tatjana2/"))
+
+            dpg.add_key_press_handler(dpg.mvKey_A, callback=callback_load_alona) 
+            dpg.add_key_press_handler(dpg.mvKey_T, callback=callback_load_tatjana)   
+
+
+    
     def prepare_camera(self):
         @dataclass
         class Cam:
@@ -802,6 +904,12 @@ class LocalViewer(Mini3DViewer):
         while dpg.is_dearpygui_running():
 
             if self.need_update or self.playing:
+                if not hasattr(self, 'gaussians') or self.gaussians is None:
+                    self.render_buffer = np.zeros((self.H, self.W, 3))
+                    dpg.set_value("_texture", self.render_buffer)
+                    self.need_update = False
+                    continue
+
                 cam = self.prepare_camera()
 
                 if dpg.get_value("_checkbox_show_splatting"):
@@ -828,7 +936,7 @@ class LocalViewer(Mini3DViewer):
                 elif not dpg.get_value("_checkbox_show_splatting") and dpg.get_value("_checkbox_show_mesh"):
                     rgb = rgb_mesh
                 else:
-                    rgb = torch.ones([self.H, self.W, 3])
+                    rgb = torch.zeros([self.H, self.W, 3])
 
                 self.render_buffer = rgb.cpu().numpy()
                 if self.render_buffer.shape[0] != self.H or self.render_buffer.shape[1] != self.W:
