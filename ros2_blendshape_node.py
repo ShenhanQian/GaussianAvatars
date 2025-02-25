@@ -35,15 +35,15 @@ OVR_ARKIT_BLENDSHAPES_MAP = {
     "109": ("cheekSquint_R", 1.0),
     "110": ("noseSneer_L", 1.0),
     "111": ("noseSneer_R", 1.0),
-    "113": ("jawForward", 1.5),
-    "114": ("jawLeft", 1.5),
-    "115": ("jawRight", 1.5),
+    "113": ("jawForward", 1.0),
+    "114": ("jawLeft", 1.0),
+    "115": ("jawRight", 1.0),
     "116": ("mouthFunnel", 1.5),  # Note: Used for all funnel variants in old naming
     "117": ("mouthPucker", 1.5),  # Note: Used for both L/R in old naming
-    "118": ("mouthLeft", 1.5),
-    "119": ("mouthRight", 1.5),
-    "120": ("mouthRollUpper", 1),  # Note: Lip Suck LT/RT in old naming
-    "121": ("mouthRollLower", 1),  # Note: Lip Suck LB/RB in old naming
+    "118": ("mouthLeft", 1.0),
+    "119": ("mouthRight", 1.0),
+    "120": ("mouthRollUpper", 0.8),  # Note: Lip Suck LT/RT in old naming
+    "121": ("mouthRollLower", 0.8),  # Note: Lip Suck LB/RB in old naming
     "122": ("mouthShrugUpper", 1),
     "123": ("mouthShrugLower", 1),
     "124": ("mouthClose", 1.0),
@@ -61,6 +61,12 @@ OVR_ARKIT_BLENDSHAPES_MAP = {
     "136": ("mouthPress_R", 1),
     "137": ("mouthStretch_L", 1.5),
     "138": ("mouthStretch_R", 1.5)
+}
+
+NAME_MAP = {
+    "raf": "rafael3",
+    "alona": "alona5",
+    "tatjana": "tatjan2"
 }
 
 # OVR_ARKIT_BLENDSHAPES_MAP = {
@@ -167,12 +173,18 @@ class ROS2Subscriber(Node):
             self.viewer.update_blendshapes_from_ros(self.blendshape_data)
 
     def presence_callback(self, msg):
-        self.get_logger().info(f"Presence msg arrived: {msg.data}")
-        self.viewer.toggle_splatting(msg.data)
+        # self.get_logger().info(f"Presence msg arrived: {msg.data}")
+        self.viewer.splatting_visible = msg.data
+        # self.viewer.toggle_splatting(msg.data)
 
     def name_callback(self, msg):
-        self.viewer.unload_avatar()
-        self.viewer.load_avatar(f"{AVATAR_PATH}/{msg.data}")
+        if msg.data in NAME_MAP:
+            # self.get_logger().info(f"{NAME_MAP}
+            self.viewer.avatar_path = f"{AVATAR_PATH}/{NAME_MAP[msg.data]}"
+        else:
+            self.get_logger().info(f"Avatar name not found: {msg.data}")
+        # self.viewer.unload_avatar()
+        # self.viewer.load_avatar(f"{AVATAR_PATH}/{msg.data}")
 
     def expressions_callback(self, msg):
         # current_time = self.get_clock().now()

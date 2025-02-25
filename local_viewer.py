@@ -268,7 +268,10 @@ class LocalViewer(Mini3DViewer):
         self.expr_enabled = False
         self.create_blendshape_sliders()
 
+        self.splatting_visible = True
+
         self.eyes_data = None
+        self.avatar_path = None
 
         self.need_update = False
 
@@ -371,6 +374,8 @@ class LocalViewer(Mini3DViewer):
             dpg.set_value("_checkbox_show_splatting", not current_value)
         else:
             dpg.set_value("_checkbox_show_splatting", value)
+        self.splatting_visible = dpg.get_value("_checkbox_show_splatting")
+        print(f"Changed splatting visibilty to {self.splatting_visible}")
         self.need_update = True
 
     def animate_random_blendshapes(self, duration=5.0, intensity_range=(0.0, 0.7), transition_speed=0.1, 
@@ -721,6 +726,9 @@ class LocalViewer(Mini3DViewer):
         Args:
             folder_path (Path): Path to the folder containing the avatar files
         """
+        if folder_path is None or folder_path == "":
+            print("No folder path provided. Cannot load avatar.")
+            return
         # Find ply and motion files in the folder
         folder_path = Path(folder_path)
         ply_files = list(folder_path.glob("*.ply"))
@@ -733,6 +741,12 @@ class LocalViewer(Mini3DViewer):
         if motion_files:
             motion_path = motion_files[0]
         
+        if self.cfg.point_path == point_path and self.cfg.motion_path == motion_path:
+            # print("Avatar already loaded.")
+            return
+        
+        self.unload_avatar()
+        print("Loading avatar from", folder_path)
         # Update config paths
         self.cfg.point_path = point_path
         self.cfg.motion_path = motion_path
@@ -1004,6 +1018,7 @@ class LocalViewer(Mini3DViewer):
                 def callback_show_splatting(sender, app_data):
                     self.need_update = True
                 dpg.add_checkbox(label="show splatting", default_value=True, callback=callback_show_splatting, tag="_checkbox_show_splatting")
+                self.splatting_visible = dpg.get_value("_checkbox_show_splatting")
 
                 dpg.add_spacer(width=10)
 
@@ -1348,6 +1363,12 @@ class LocalViewer(Mini3DViewer):
                             self.update_eyes_from_ros(self.subscriber.eyes_data)
                         if self.subscriber.blendshape_data is not None:
                             self.update_blendshapes_from_ros(self.subscriber.blendshape_data)
+                        splatting_visible_cur = dpg.get_value("_checkbox_show_splatting")
+                        if splatting_visible_cur != self.splatting_visible:
+                            self.toggle_splatting(self.splatting_visible)
+                        if self.avatar_path != self.cfg.point_path and self.avatar_path is not None and self.avatar_path != "":
+                            self.load_avatar(self.avatar_path)
+                        
               
 
                     if self.need_update or self.playing:
