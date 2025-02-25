@@ -9,7 +9,7 @@ import traceback
 AVATAR_PATH = "/workspace/avatars/"
 
 OVR_ARKIT_BLENDSHAPES_MAP = {
-    "19": ("jawOpen", 1.5),
+    "19": ("jawOpen", 2.0),
     "50": ("cheekPuff", 1.0),  # Note: Cheek Suck L/R in old naming
     "88": ("browInnerUp", 1.0),  # Note: Used for both L/R in old naming
     "89": ("browDown_L", 1.0),
@@ -42,23 +42,23 @@ OVR_ARKIT_BLENDSHAPES_MAP = {
     "117": ("mouthPucker", 1.5),  # Note: Used for both L/R in old naming
     "118": ("mouthLeft", 1.5),
     "119": ("mouthRight", 1.5),
-    "120": ("mouthRollUpper", 1.5),  # Note: Lip Suck LT/RT in old naming
-    "121": ("mouthRollLower", 1.5),  # Note: Lip Suck LB/RB in old naming
-    "122": ("mouthShrugUpper", 1.5),
-    "123": ("mouthShrugLower", 1.5),
-    "124": ("mouthClose", 1.5),
+    "120": ("mouthRollUpper", 1),  # Note: Lip Suck LT/RT in old naming
+    "121": ("mouthRollLower", 1),  # Note: Lip Suck LB/RB in old naming
+    "122": ("mouthShrugUpper", 1),
+    "123": ("mouthShrugLower", 1),
+    "124": ("mouthClose", 1.0),
     "125": ("mouthSmile_L", 1.5),
     "126": ("mouthSmile_R", 1.5),
-    "127": ("mouthFrown_L", 1.5),
-    "128": ("mouthFrown_R", 1.5),
-    "129": ("mouthDimple_L", 1.5),
-    "130": ("mouthDimple_R", 1.5),
-    "131": ("mouthUpperUp_L", 1.5),
-    "132": ("mouthUpperUp_R", 1.5),
-    "133": ("mouthLowerDown_L", 1.5),
-    "134": ("mouthLowerDown_R", 1.5),
-    "135": ("mouthPress_L", 1.5),
-    "136": ("mouthPress_R", 1.5),
+    "127": ("mouthFrown_L", 1),
+    "128": ("mouthFrown_R", 1),
+    "129": ("mouthDimple_L", 1),
+    "130": ("mouthDimple_R", 1),
+    "131": ("mouthUpperUp_L", 1),
+    "132": ("mouthUpperUp_R", 1),
+    "133": ("mouthLowerDown_L", 1),
+    "134": ("mouthLowerDown_R", 1),
+    "135": ("mouthPress_L", 1),
+    "136": ("mouthPress_R", 1),
     "137": ("mouthStretch_L", 1.5),
     "138": ("mouthStretch_R", 1.5)
 }
@@ -156,9 +156,10 @@ class ROS2Subscriber(Node):
             1
         )
 
-        self.create_timer(1/8.0, self.timer_callback)
+        # self.create_timer(1/8.0, self.timer_callback)
 
     def timer_callback(self):
+
         if self.eyes_data is not None:
             self.viewer.update_eyes_from_ros(self.eyes_data)
         

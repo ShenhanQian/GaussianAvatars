@@ -634,10 +634,10 @@ class LocalViewer(Mini3DViewer):
                     dpg.set_value("_checkbox_enable_control", True)
 
 
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
+                # torch.cuda.synchronize()
+                # torch.cuda.empty_cache()
                 self.gaussians.update_mesh_by_param_dict(self.flame_param)
-                torch.cuda.synchronize()
+                # torch.cuda.synchronize()
                 # self.gaussians.update_mesh_by_param_dict(self.flame_param)
 
 
@@ -1051,7 +1051,7 @@ class LocalViewer(Mini3DViewer):
             # scaling_modifier slider
             def callback_set_scaling_modifier(sender, app_data):
                 self.need_update = True
-            dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=2, format="%.2f", width=200, default_value=1, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
+            dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=2, format="%.2f", width=200, default_value=1.0, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
 
             # fov slider
             def callback_set_fovy(sender, app_data):
@@ -1344,6 +1344,10 @@ class LocalViewer(Mini3DViewer):
 
                     if rclpy.ok():
                         rclpy.spin_once(self.subscriber, timeout_sec=0)
+                        if self.subscriber.eyes_data is not None:
+                            self.update_eyes_from_ros(self.subscriber.eyes_data)
+                        if self.subscriber.blendshape_data is not None:
+                            self.update_blendshapes_from_ros(self.subscriber.blendshape_data)
               
 
                     if self.need_update or self.playing:
@@ -1362,9 +1366,9 @@ class LocalViewer(Mini3DViewer):
                             with cuda_error_handling():
                                 # rgb_splatting = self.safe_render(cam)
                                 # rgb
-                                torch.cuda.synchronize()
+                                # torch.cuda.synchronize()
                                 rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, torch.tensor(self.cfg.background_color).cuda(), scaling_modifier=dpg.get_value("_slider_scaling_modifier"))["render"].permute(1, 2, 0).contiguous()
-                                torch.cuda.synchronize()
+                                # torch.cuda.synchronize()
                                 # opacity
                                 # override_color = torch.ones_like(self.gaussians._xyz).cuda()
                                 # background_color = torch.tensor(self.cfg.background_color).cuda() * 0
@@ -1414,8 +1418,8 @@ class LocalViewer(Mini3DViewer):
                     
                     frame_duration = time.time() - current_time
                     sleep_time = max(0, frame_time - frame_duration)
-                    if sleep_time > 0:
-                        time.sleep(sleep_time)
+                    # if sleep_time > 0:
+                    #     time.sleep(sleep_time)
                     
                     # Update last frame time for next iteration
                     last_frame_time = time.time()
