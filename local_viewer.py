@@ -5,6 +5,14 @@
 # related documentation without an express license agreement from Toyota Motor Europe NV/SA 
 # is strictly prohibited.
 #
+import os
+
+# # Limit the overall number of Python threads
+# max_threads = min(8, os.cpu_count())  # Or set to a specific number like 6
+# print(f"Limiting Python threads to {max_threads}")
+# # Limit OpenMP threads (used by PyTorch and many scientific libraries)
+# os.environ["OMP_NUM_THREADS"] = str(max_threads)
+# os.environ["MKL_NUM_THREADS"] = str(max_threads)
 
 import json
 import math
@@ -28,6 +36,17 @@ from mesh_renderer import NVDiffRenderer
 
 from ros2_blendshape_node import main as ros2_main
 import threading
+
+import logging
+import sys
+import traceback
+import threading
+import psutil
+
+from contextlib import contextmanager
+
+import gc
+
 
 @dataclass
 class PipelineConfig:
@@ -77,11 +96,143 @@ ARKit_BLENDSHAPE_NAMES = [
     #"tongueOut"
 ]
 
+# # Add this near the beginning of your application
+# torch.cuda.set_per_process_memory_fraction(0.8)  # Use up to 80% of GPU memory
+
+
+# # Limit PyTorch threads
+# torch.set_num_threads(max_threads)
+# torch.set_num_interop_threads(max_threads // 2)  # Typically half the core count
+
+
+def reserve_gpu_memory(size_mb=2048):
+    """Reserve GPU memory at startup to prevent fragmentation"""
+    # Convert MB to bytes
+    size_bytes = size_mb * 1024 * 1024
+    
+    # Allocate a large tensor to reserve memory
+    # This will be released when the variable goes out of scope
+    # but will help establish a larger memory pool
+    torch.cuda.empty_cache()
+    reserved_memory = torch.empty(size_bytes, device='cuda', dtype=torch.uint8)
+    # Now free it to make space for actual operations
+    del reserved_memory
+    torch.cuda.empty_cache()
+    
+    logger.info(f"Reserved {size_mb}MB of GPU memory")
+
+# Set up logging
+logging.basicConfig(
+    level=logging.DEBUG,  # Changed to DEBUG for more detail
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('gpu_debug.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger('GPUMonitor')
+
+class GPUMonitor:
+    def __init__(self, check_interval=1.0):
+        self.check_interval = check_interval
+        self.keep_running = True
+        self.monitor_thread = None
+        self.last_allocated = 0
+        self.peak_allocated = 0
+        self.allocation_spikes = 0
+        
+    def start(self):
+        self.monitor_thread = threading.Thread(target=self._monitor_loop)
+        self.monitor_thread.daemon = True
+        self.monitor_thread.start()
+        
+    def stop(self):
+        self.keep_running = False
+        if self.monitor_thread:
+            self.monitor_thread.join()
+            
+    def _monitor_loop(self):
+        while self.keep_running:
+            try:
+                # Get PyTorch CUDA memory info with more detail
+                if torch.cuda.is_available():
+                    try:
+                        current_device = torch.cuda.current_device()
+                        memory_allocated = torch.cuda.memory_allocated(current_device) / 1024**2
+                        memory_reserved = torch.cuda.memory_reserved(current_device) / 1024**2
+
+                        # torch.cuda.empty_cache()
+                        
+                        # Track memory spikes
+                        if memory_allocated > self.peak_allocated:
+                            self.peak_allocated = memory_allocated
+                            logger.info(f"New peak GPU memory: {self.peak_allocated:.1f}MB")
+                        
+                        # Log significant changes
+                        delta = abs(memory_allocated - self.last_allocated)
+                        if delta > 50:  # Log if memory changes by more than 50MB
+                            self.allocation_spikes += 1
+                            logger.warning(f"Memory spike detected: {delta:.1f}MB change")
+                            
+                        self.last_allocated = memory_allocated
+                        
+                        # Log current state
+                        logger.info(f"GPU {current_device} Memory: Allocated={memory_allocated:.1f}MB, Reserved={memory_reserved:.1f}MB")
+
+                        torch.cuda.empty_cache()
+                        gc.collect()  # Also clear Python garbage collector
+                        
+                    except Exception as e:
+                        logger.warning(f"Could not get GPU memory stats: {e}")
+                
+                # Log process memory usage
+                try:
+                    process = psutil.Process(os.getpid())
+                    memory_info = process.memory_info()
+                    logger.info(f"Process Memory: RSS={memory_info.rss/1024**2:.1f}MB, VMS={memory_info.vms/1024**2:.1f}MB")
+                except Exception as e:
+                    logger.warning(f"Could not get process memory info: {e}")
+                
+            except Exception as e:
+                logger.error(f"Error in GPU monitoring: {e}")
+                
+            try:
+                time.sleep(self.check_interval)
+            except Exception:
+                pass
+
+@contextmanager
+def cuda_error_handling():
+    try:
+        yield
+    except RuntimeError as e:
+        if "CUDA" in str(e):
+            logger.error(f"CUDA Runtime Error: {str(e)}")
+            logger.error(traceback.format_exc())
+            # Try to recover
+            torch.cuda.empty_cache()
+        else:
+            raise
+    except torch.cuda.OutOfMemoryError as e:
+        logger.error(f"CUDA Out of Memory: {str(e)}")
+        logger.error(traceback.format_exc())
+        # Try to recover
+        torch.cuda.empty_cache()
+        gc.collect()
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise
 
 class LocalViewer(Mini3DViewer):
     def __init__(self, cfg: Config):
         self.cfg = cfg
         
+        self.setup_error_handling()
+
+        self.threading_lock = threading.RLock() 
+
         # recording settings
         self.keyframes = []  # list of state dicts of keyframes
         self.all_frames = {}  # state dicts of all frames {key: [num_frames, ...]}
@@ -90,7 +241,6 @@ class LocalViewer(Mini3DViewer):
 
         print("Initializing 3D Gaussians...")
         self.init_gaussians()
-
 
 
         if self.gaussians.binding is not None:
@@ -117,11 +267,89 @@ class LocalViewer(Mini3DViewer):
         self.expr_enabled = False
         self.create_blendshape_sliders()
 
-        self.need_update = False
-        ros2_thread = threading.Thread(target=ros2_main, args=(self,))
-        time.sleep(3)
-        ros2_thread.start()
+        self.eyes_data = None
 
+        self.need_update = False
+        # ros2_thread = threading.Thread(target=ros2_main, args=(self,))
+        # # time.sleep(3)
+        # ros2_thread.start()
+
+        # Use a more controlled approach:
+        from concurrent.futures import ThreadPoolExecutor
+        
+        # Create a dedicated executor for ROS2
+        self.ros2_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ros2-worker")
+        
+        # Submit the ROS2 task to the executor
+        self.ros2_future = self.ros2_executor.submit(ros2_main, self)
+
+        # self.start_random_animation()
+
+    def setup_error_handling(self):
+        try:
+            # Check if CUDA is available
+            if not torch.cuda.is_available():
+                logger.warning("CUDA is not available - running in CPU mode")
+                return
+
+            # Initialize CUDA properly
+            device_count = torch.cuda.device_count()
+            if device_count == 0:
+                logger.warning("No CUDA devices found")
+                return
+                
+            # Set device and clear cache
+            torch.cuda.set_device(0)
+            torch.cuda.empty_cache()
+            
+            # Enable gradients tracking for debugging
+            torch.set_grad_enabled(True)
+            torch.autograd.set_detect_anomaly(True)
+
+            reserve_gpu_memory(2048)
+            
+            # Start GPU monitoring
+            self.gpu_monitor = GPUMonitor(check_interval=10.0)
+            self.gpu_monitor.start()
+            
+            logger.info(f"CUDA setup complete. Using device: {torch.cuda.get_device_name(0)}")
+            
+        except Exception as e:
+            logger.error(f"Error during CUDA setup: {str(e)}")
+            logger.error(traceback.format_exc())
+
+    def safe_render(self, cam):
+        with cuda_error_handling():
+            
+            try:
+                # Clear cache before render
+                torch.cuda.empty_cache()
+                
+                if dpg.get_value("_checkbox_show_splatting"):
+                    # Add sync point to catch errors
+                    # torch.cuda.synchronize()
+                    with self.threading_lock:
+                        rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, 
+                                            torch.tensor(self.cfg.background_color).cuda(), 
+                                            scaling_modifier=dpg.get_value("_slider_scaling_modifier"))["render"].permute(1, 2, 0).contiguous()
+                    
+                    # Add another sync point
+                    # torch.cuda.synchronize()
+                    
+                    return rgb_splatting
+                    
+            except Exception as e:
+                logger.error(f"Error in render: {str(e)}")
+                logger.error(traceback.format_exc())
+                raise
+
+    def cleanup(self):
+        if hasattr(self, 'gpu_monitor'):
+            self.gpu_monitor.stop()
+        torch.cuda.empty_cache()
+
+    
+        
     def toggle_splatting(self, value=None):
         """
         Toggle or set the splatting visibility
@@ -136,6 +364,146 @@ class LocalViewer(Mini3DViewer):
         else:
             dpg.set_value("_checkbox_show_splatting", value)
         self.need_update = True
+
+    def animate_random_blendshapes(self, duration=5.0, intensity_range=(0.0, 0.7), transition_speed=0.1, 
+                               selected_blendshapes=None, random_seed=None):
+        """
+        Animate random blendshapes over time to create varied facial expressions.
+        
+        Args:
+            duration (float): Duration of the animation in seconds.
+            intensity_range (tuple): Range of blendshape intensity values (min, max).
+            transition_speed (float): Speed of transitions between expressions (0.0-1.0).
+                                    Lower values create smoother transitions.
+            selected_blendshapes (list): List of specific blendshapes to animate. If None, uses all blendshapes.
+            random_seed (int): Seed for random number generation for reproducible animations.
+        
+        Note:
+            This function should be called in a separate thread to avoid blocking the main UI.
+        """
+        import numpy as np
+        import time
+        import threading
+        import random
+        
+        if random_seed is not None:
+            np.random.seed(random_seed)
+            random.seed(random_seed)
+        
+        # If no specific blendshapes selected, use all available ones
+        if selected_blendshapes is None:
+            available_blendshapes = list(self.blendshape_values.keys())
+        else:
+            # Ensure all selected blendshapes exist
+            available_blendshapes = [bs for bs in selected_blendshapes if bs in self.blendshape_values]
+            if not available_blendshapes:
+                print("No valid blendshapes selected. Using all available blendshapes.")
+                available_blendshapes = list(self.blendshape_values.keys())
+        
+        # Group related blendshapes to create more natural expressions
+        blendshape_groups = {
+            'brows': [bs for bs in available_blendshapes if 'brow' in bs.lower()],
+            'eyes': [bs for bs in available_blendshapes if 'eye' in bs.lower()],
+            'mouth': [bs for bs in available_blendshapes if 'mouth' in bs.lower()],
+            'cheeks': [bs for bs in available_blendshapes if 'cheek' in bs.lower()],
+            'jaw': [bs for bs in available_blendshapes if 'jaw' in bs.lower()],
+            'nose': [bs for bs in available_blendshapes if 'nose' in bs.lower()]
+        }
+        
+        # Create initial and target values for all blendshapes
+        current_values = {bs: self.blendshape_values[bs] for bs in available_blendshapes}
+        target_values = {bs: 0.0 for bs in available_blendshapes}
+        
+        # Animation timing variables
+        start_time = time.time()
+        last_target_update = start_time
+        target_update_interval = 1.0/10  # Time between generating new target values
+        
+        # Clear GPU memory before starting
+        if hasattr(self, 'gpu_monitor'):
+            torch.cuda.empty_cache()
+        
+        try:
+            with cuda_error_handling():
+                # Main animation loop
+                while time.time() - start_time < duration:
+                    current_time = time.time()
+                    
+                    # Generate new target values periodically
+                    if current_time - last_target_update > target_update_interval:
+                        last_target_update = current_time
+                        
+                        # Reset all targets first
+                        for bs in target_values:
+                            target_values[bs] = 0.0
+                        
+                        # Randomly select 1-3 blendshape groups to activate
+                        active_groups = random.sample(list(blendshape_groups.keys()), 
+                                                    random.randint(1, min(3, len(blendshape_groups))))
+                        
+                        # For each active group, select a random subset of blendshapes
+                        for group in active_groups:
+                            group_blendshapes = blendshape_groups[group]
+                            if not group_blendshapes:
+                                continue
+                                
+                            # Select 30-70% of blendshapes in this group
+                            num_to_select = max(1, int(random.uniform(0.3, 0.7) * len(group_blendshapes)))
+                            selected = random.sample(group_blendshapes, num_to_select)
+                            
+                            # Set random target values for selected blendshapes
+                            for bs in selected:
+                                min_val, max_val = intensity_range
+                                target_values[bs] = random.uniform(min_val, max_val)
+                        
+                        # Special case: ensure eye blinks are synchronized
+                        if 'eyeBlink_L' in target_values and 'eyeBlink_R' in target_values:
+                            if random.random() < 0.2:  # 20% chance of blinking
+                                blink_value = random.uniform(0.7, 1.0)
+                                target_values['eyeBlink_L'] = blink_value
+                                target_values['eyeBlink_R'] = blink_value
+                    
+                    # Interpolate current values toward target values
+                    for bs in current_values:
+                        current_values[bs] += (target_values[bs] - current_values[bs]) * transition_speed
+                        self.blendshape_values[bs] = current_values[bs]
+                        
+                        # Update UI sliders if they exist
+                        try:
+                            if dpg.does_item_exist(f"_slider_{bs}"):
+                                dpg.set_value(f"_slider_{bs}", current_values[bs])
+                        except Exception as e:
+                            # Ignore UI update errors
+                            pass
+                    
+                    # Update the FLAME model with new values
+                    self.update_flame_model()
+                    
+                    # Allow UI to remain responsive
+                    time.sleep(0.01)
+        
+        except Exception as e:
+            logger.error(f"Error in random blendshapes animation: {str(e)}")
+            logger.error(traceback.format_exc())
+    
+    # Function to start the animation in a separate thread
+    def start_random_animation(self, duration=5000.0, intensity=None):
+        """Start a random blendshape animation in a background thread"""
+        if intensity is None:
+            # Choose animation type based on intensity
+            animation_thread = threading.Thread(
+                target=self.animate_random_blendshapes,
+                args=(duration, (0.0, 0.7), 0.1, None, None)
+            )
+        else:
+            animation_thread = threading.Thread(
+                target=self.animate_random_blendshapes,
+                args=(duration, (0.0, intensity), 0.1, None, None)
+            )
+        
+        animation_thread.daemon = True
+        animation_thread.start()
+        return animation_thread
 
     def create_blendshape_sliders(self):
         with dpg.window(label="ARKit Blendshapes", tag="_blendshape_window", autosize=True, pos=(self.W-300, self.H//2),show=not self.cfg.demo_mode):
@@ -209,26 +577,61 @@ class LocalViewer(Mini3DViewer):
 
     def update_eyes_from_ros(self, eyes_data):
         try:
+            # Update X values
             dpg.set_value("_slider-eyes-x", eyes_data[0])
+            # Manually trigger the callback for X
+            # self.flame_param['eyes'][0, 0] = eyes_data[0]  # First eye
+            # self.flame_param['eyes'][0, 3] = eyes_data[0]  # Second eye
+            
+            # Update Y values
             dpg.set_value("_slider-eyes-y", eyes_data[1])
+            # Manually trigger the callback for Y
+            # self.flame_param['eyes'][0, 1] = eyes_data[1]  # First eye
+            # self.flame_param['eyes'][0, 4] = eyes_data[1]  # Second eye
+            self.eyes_data = eyes_data
+            
+            # temporarily take this out to see if confilict with the blendshape causes crash
+            # # Update the mesh
+            # if not dpg.get_value("_checkbox_enable_control"):
+            #     dpg.set_value("_checkbox_enable_control", True)
+            # self.gaussians.update_mesh_by_param_dict(self.flame_param)
+            # self.need_update = True
+            
         except Exception as e:
-            print(f"Failed to set eye values: {e}") 
+            print(f"Failed to set eye values: {e}")
         
 
 
     def update_flame_model(self):
-        blendshapes = np.array([self.blendshape_values[name] for name in ARKit_BLENDSHAPE_NAMES])
-        expressions, jaw = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)
-        self.flame_param['expr'] = expressions.unsqueeze(0)  # Add batch dimension
-        for i in range(len(jaw)): self.flame_param['jaw'][0, i] = jaw[i]
+        with self.threading_lock:
+            try:
+                blendshapes = np.array([self.blendshape_values[name] for name in ARKit_BLENDSHAPE_NAMES])
+                expressions, jaw = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)
+                self.flame_param['expr'] = expressions.unsqueeze(0)  # Add batch dimension
+                for i in range(len(jaw)): self.flame_param['jaw'][0, i] = jaw[i]
 
-        if not dpg.get_value("_checkbox_enable_control"):
-            dpg.set_value("_checkbox_enable_control", True)
+                self.flame_param['neck'][0, 0] = 0.2 # Neck pitch a bit down for a more natural look
 
-        self.gaussians.update_mesh_by_param_dict(self.flame_param)
+                if self.eyes_data is not None:
+                    self.flame_param['eyes'][0, 0] = self.eyes_data[1]  # First eye
+                    self.flame_param['eyes'][0, 3] = self.eyes_data[1]  # Second eye
+                    self.flame_param['eyes'][0, 1] = -self.eyes_data[0]  # First eye
+                    self.flame_param['eyes'][0, 4] = -self.eyes_data[0]  # Second eye
+
+                if not dpg.get_value("_checkbox_enable_control"):
+                    dpg.set_value("_checkbox_enable_control", True)
 
 
-        self.need_update = True
+                torch.cuda.synchronize()
+                self.gaussians.update_mesh_by_param_dict(self.flame_param)
+                torch.cuda.synchronize()
+                # self.gaussians.update_mesh_by_param_dict(self.flame_param)
+
+
+                self.need_update = True
+            except Exception as e:
+                logger.error(f"Error in blendshape change: {e}")
+                logger.error(traceback.format_exc())
 
     def on_blendshape_change(self, sender, app_data, user_data):
         """Handle changes to blendshape sliders and update FLAME model"""
@@ -632,7 +1035,7 @@ class LocalViewer(Mini3DViewer):
             # scaling_modifier slider
             def callback_set_scaling_modifier(sender, app_data):
                 self.need_update = True
-            dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=1, format="%.2f", width=200, default_value=1, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
+            dpg.add_slider_float(label="Scale modifier", min_value=0, max_value=2, format="%.2f", width=200, default_value=1, callback=callback_set_scaling_modifier, tag="_slider_scaling_modifier")
 
             # fov slider
             def callback_set_fovy(sender, app_data):
@@ -810,10 +1213,12 @@ class LocalViewer(Mini3DViewer):
                 dpg.add_separator()
 
                 def callback_set_pose(sender, app_data):
+                    
                     joint, axis = sender.split('-')[1:3]
                     axis_idx = {'x': 0, 'y': 1, 'z': 2}[axis]
                     self.flame_param[joint][0, axis_idx] = app_data
                     if joint == 'eyes':
+                        print("in the callback to set eye pose")
                         self.flame_param[joint][0, 3+axis_idx] = app_data
                     if not dpg.get_value("_checkbox_enable_control"):
                         dpg.set_value("_checkbox_enable_control", True)
@@ -908,70 +1313,98 @@ class LocalViewer(Mini3DViewer):
 
     @torch.no_grad()
     def run(self):
-        print("Running LocalViewer...")
+        try:
+            print("Running LocalViewer...")
+            target_fps = 10
+            frame_time = 1.0 / target_fps  # Time per frame in seconds
+            last_frame_time = time.time()
 
-        while dpg.is_dearpygui_running():
+            while dpg.is_dearpygui_running():
+                try:
 
-            if self.need_update or self.playing:
-                if not hasattr(self, 'gaussians') or self.gaussians is None:
-                    self.render_buffer = np.zeros((self.H, self.W, 3))
-                    dpg.set_value("_texture", self.render_buffer)
-                    self.need_update = False
-                    continue
+                    current_time = time.time()
+                    elapsed = current_time - last_frame_time
+              
 
-                cam = self.prepare_camera()
+                    if self.need_update or self.playing:
+                        if not hasattr(self, 'gaussians') or self.gaussians is None:
+                            self.render_buffer = np.zeros((self.H, self.W, 3))
+                            dpg.set_value("_texture", self.render_buffer)
+                            self.need_update = False
+                            continue
 
-                if dpg.get_value("_checkbox_show_splatting"):
-                    # rgb
-                    rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, torch.tensor(self.cfg.background_color).cuda(), scaling_modifier=dpg.get_value("_slider_scaling_modifier"))["render"].permute(1, 2, 0).contiguous()
+                        cam = self.prepare_camera()
+                        # time.sleep(0.05)
 
-                    # opacity
-                    # override_color = torch.ones_like(self.gaussians._xyz).cuda()
-                    # background_color = torch.tensor(self.cfg.background_color).cuda() * 0
-                    # rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, background_color, scaling_modifier=dpg.get_value("_slider_scaling_modifier"), override_color=override_color)["render"].permute(1, 2, 0).contiguous()
+                        if dpg.get_value("_checkbox_show_splatting"):
+                            with cuda_error_handling():
+                                # rgb_splatting = self.safe_render(cam)
+                                # rgb
+                                torch.cuda.synchronize()
+                                rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, torch.tensor(self.cfg.background_color).cuda(), scaling_modifier=dpg.get_value("_slider_scaling_modifier"))["render"].permute(1, 2, 0).contiguous()
+                                torch.cuda.synchronize()
+                                # opacity
+                                # override_color = torch.ones_like(self.gaussians._xyz).cuda()
+                                # background_color = torch.tensor(self.cfg.background_color).cuda() * 0
+                                # rgb_splatting = render(cam, self.gaussians, self.cfg.pipeline, background_color, scaling_modifier=dpg.get_value("_slider_scaling_modifier"), override_color=override_color)["render"].permute(1, 2, 0).contiguous()
 
-                if self.gaussians.binding is not None and dpg.get_value("_checkbox_show_mesh"):
-                    out_dict = self.mesh_renderer.render_from_camera(self.gaussians.verts, self.gaussians.faces, cam, face_colors=self.face_colors)
+                        if self.gaussians.binding is not None and dpg.get_value("_checkbox_show_mesh"):
+                            out_dict = self.mesh_renderer.render_from_camera(self.gaussians.verts, self.gaussians.faces, cam, face_colors=self.face_colors)
 
-                    rgba_mesh = out_dict['rgba'].squeeze(0)  # (H, W, C)
-                    rgb_mesh = rgba_mesh[:, :, :3]
-                    alpha_mesh = rgba_mesh[:, :, 3:]
-                    mesh_opacity = self.mesh_color[3:].cuda()
+                            rgba_mesh = out_dict['rgba'].squeeze(0)  # (H, W, C)
+                            rgb_mesh = rgba_mesh[:, :, :3]
+                            alpha_mesh = rgba_mesh[:, :, 3:]
+                            mesh_opacity = self.mesh_color[3:].cuda()
 
-                if dpg.get_value("_checkbox_show_splatting") and dpg.get_value("_checkbox_show_mesh"):
-                    rgb = rgb_mesh * alpha_mesh * mesh_opacity  + rgb_splatting * (alpha_mesh * (1 - mesh_opacity) + (1 - alpha_mesh))
-                elif dpg.get_value("_checkbox_show_splatting") and not dpg.get_value("_checkbox_show_mesh"):
-                    rgb = rgb_splatting
-                elif not dpg.get_value("_checkbox_show_splatting") and dpg.get_value("_checkbox_show_mesh"):
-                    rgb = rgb_mesh
-                else:
-                    rgb = torch.zeros([self.H, self.W, 3])
+                        if dpg.get_value("_checkbox_show_splatting") and dpg.get_value("_checkbox_show_mesh"):
+                            rgb = rgb_mesh * alpha_mesh * mesh_opacity  + rgb_splatting * (alpha_mesh * (1 - mesh_opacity) + (1 - alpha_mesh))
+                        elif dpg.get_value("_checkbox_show_splatting") and not dpg.get_value("_checkbox_show_mesh"):
+                            rgb = rgb_splatting
+                        elif not dpg.get_value("_checkbox_show_splatting") and dpg.get_value("_checkbox_show_mesh"):
+                            rgb = rgb_mesh
+                        else:
+                            rgb = torch.zeros([self.H, self.W, 3])
 
-                self.render_buffer = rgb.cpu().numpy()
-                if self.render_buffer.shape[0] != self.H or self.render_buffer.shape[1] != self.W:
-                    continue
-                dpg.set_value("_texture", self.render_buffer)
+                        self.render_buffer = rgb.cpu().numpy()
+                        if self.render_buffer.shape[0] != self.H or self.render_buffer.shape[1] != self.W:
+                            continue
+                        dpg.set_value("_texture", self.render_buffer)
 
-                self.refresh_stat()
-                self.need_update = False
+                        self.refresh_stat()
+                        self.need_update = False
 
-                if self.playing:
-                    record_timestep = dpg.get_value("_slider_record_timestep")
-                    if record_timestep >= self.num_record_timeline - 1:
-                        if not dpg.get_value("_checkbox_loop_record"):
-                            self.playing = False
-                        dpg.set_value("_slider_record_timestep", 0)
-                    else:
-                        dpg.set_value("_slider_record_timestep", record_timestep + 1)
-                        if dpg.get_value("_checkbox_dynamic_record"):
-                            self.timestep = min(self.timestep + 1, self.num_timesteps - 1)
-                            dpg.set_value("_slider_timestep", self.timestep)
-                            self.gaussians.select_mesh_by_timestep(self.timestep)
+                        if self.playing:
+                            record_timestep = dpg.get_value("_slider_record_timestep")
+                            if record_timestep >= self.num_record_timeline - 1:
+                                if not dpg.get_value("_checkbox_loop_record"):
+                                    self.playing = False
+                                dpg.set_value("_slider_record_timestep", 0)
+                            else:
+                                dpg.set_value("_slider_record_timestep", record_timestep + 1)
+                                if dpg.get_value("_checkbox_dynamic_record"):
+                                    self.timestep = min(self.timestep + 1, self.num_timesteps - 1)
+                                    dpg.set_value("_slider_timestep", self.timestep)
+                                    self.gaussians.select_mesh_by_timestep(self.timestep)
 
-                        state_dict = self.get_state_dict_record()
-                        self.apply_state_dict(state_dict)
+                                state_dict = self.get_state_dict_record()
+                                self.apply_state_dict(state_dict)
+                        
+                    
+                    frame_duration = time.time() - current_time
+                    sleep_time = max(0, frame_time - frame_duration)
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+                    
+                    # Update last frame time for next iteration
+                    last_frame_time = time.time()
 
-            dpg.render_dearpygui_frame()
+                except Exception as e:
+                    logger.error(f"Error in render loop: {str(e)}")
+                    logger.error(traceback.format_exc())
+
+                dpg.render_dearpygui_frame()
+        finally:
+            self.cleanup()
 
 
 if __name__ == "__main__":
