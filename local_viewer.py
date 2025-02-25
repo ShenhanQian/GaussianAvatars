@@ -34,7 +34,8 @@ from gaussian_renderer import GaussianModel, FlameGaussianModel
 from gaussian_renderer import render
 from mesh_renderer import NVDiffRenderer
 
-from ros2_blendshape_node import main as ros2_main
+import rclpy
+from ros2_blendshape_node import ROS2Subscriber, OVR_ARKIT_BLENDSHAPES_MAP #main as ros2_main
 import threading
 
 import logging
@@ -270,6 +271,10 @@ class LocalViewer(Mini3DViewer):
         self.eyes_data = None
 
         self.need_update = False
+
+        rclpy.init()
+        self.subscriber = ROS2Subscriber(self)
+
         # ros2_thread = threading.Thread(target=ros2_main, args=(self,))
         # # # time.sleep(3)
         # ros2_thread.start()
@@ -283,7 +288,7 @@ class LocalViewer(Mini3DViewer):
         # # Submit the ROS2 task to the executor
         # self.ros2_future = self.ros2_executor.submit(ros2_main, self)
 
-        self.start_random_animation()
+        # self.start_random_animation()
 
     def setup_error_handling(self):
         try:
@@ -347,6 +352,9 @@ class LocalViewer(Mini3DViewer):
         if hasattr(self, 'gpu_monitor'):
             self.gpu_monitor.stop()
         torch.cuda.empty_cache()
+
+        self.subscriber.destroy_node()
+        rclpy.shutdown()
 
     
         
@@ -1323,15 +1331,19 @@ class LocalViewer(Mini3DViewer):
     def run(self):
         try:
             print("Running LocalViewer...")
-            target_fps = 10
+            target_fps = 30
             frame_time = 1.0 / target_fps  # Time per frame in seconds
             last_frame_time = time.time()
 
             while dpg.is_dearpygui_running():
                 try:
+                    
 
                     current_time = time.time()
                     elapsed = current_time - last_frame_time
+
+                    if rclpy.ok():
+                        rclpy.spin_once(self.subscriber, timeout_sec=0)
               
 
                     if self.need_update or self.playing:
@@ -1421,3 +1433,4 @@ if __name__ == "__main__":
     cfg = tyro.cli(Config)
     gui = LocalViewer(cfg)
     gui.run()
+
