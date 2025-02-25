@@ -123,7 +123,7 @@ class ROS2Subscriber(Node):
         super().__init__('blendshape_subscriber')
         self.viewer = viewer
 
-        self.blendshape_data = None
+        self.blendshape_data = {}
         self.eyes_data = None
         
         # Initialize time tracking
@@ -162,7 +162,7 @@ class ROS2Subscriber(Node):
         if self.eyes_data is not None:
             self.viewer.update_eyes_from_ros(self.eyes_data)
         
-        if self.blendshape_data is not None:
+        if self.blendshape_data is not None and self.blendshape_data:
             self.viewer.update_blendshapes_from_ros(self.blendshape_data)
 
     def presence_callback(self, msg):
@@ -177,7 +177,7 @@ class ROS2Subscriber(Node):
         # current_time = self.get_clock().now()
         # if (current_time - self.last_msg_time).nanoseconds / 1e9 >= self.desired_period:
         # self.get_logger().info('Received blendshape message:', throttle_duration_sec=1)
-        self.blendshape_data = {}
+        self.blendshape_data.clear()
         for index, value in zip(msg.name, msg.position):
             mapping = OVR_ARKIT_BLENDSHAPES_MAP.get(index, (index, 1.0))  # Default weight is 1.0
             blendshape_name, weight = mapping
@@ -186,12 +186,12 @@ class ROS2Subscriber(Node):
             normalized_value = (value/100.0) * weight
             self.blendshape_data[blendshape_name] = normalized_value
         # self.viewer.update_blendshapes_from_ros(self.blendshape_data)
-        self.get_logger().info(f"{list(self.blendshape_data.keys())[0]}: {list(self.blendshape_data.values())[0]}", throttle_duration_sec=10)
+        # self.get_logger().info(f"{list(self.blendshape_data.keys())[0]}: {list(self.blendshape_data.values())[0]}", throttle_duration_sec=10)
         # self.last_msg_time = current_time
 
     def eyes_callback(self, msg):
         self.eyes_data = [msg.pose.orientation.x / 100.0, msg.pose.orientation.y / 100.0]
-        self.get_logger().info(f"Eyes: {self.eyes_data}", throttle_duration_sec=10)
+        # self.get_logger().info(f"Eyes: {self.eyes_data}", throttle_duration_sec=10)
 
     # def expressions_callback(self, msg):
     #     self.get_logger().info('Received blendshape message:', throttle_duration_sec=1)
@@ -203,40 +203,40 @@ class ROS2Subscriber(Node):
     #         self.blendshape_data[blendshape_name] = normalized_value
 
 def main(viewer):
-    # rclpy.init()
-    # subscriber = ROS2Subscriber(viewer)
-    # rclpy.spin(subscriber)
-    # subscriber.destroy_node()
-    # rclpy.shutdown()
-    print("ROS2 node starting...")
-    try:
-        # Force a clean rclpy state
-        try:
-            rclpy.shutdown()
-        except:
-            pass
+    rclpy.init()
+    subscriber = ROS2Subscriber(viewer)
+    rclpy.spin(subscriber)
+    subscriber.destroy_node()
+    rclpy.shutdown()
+    # print("ROS2 node starting...")
+    # try:
+    #     # Force a clean rclpy state
+    #     try:
+    #         rclpy.shutdown()
+    #     except:
+    #         pass
             
-        # Initialize with explicit domain ID
-        rclpy.init()
-        print("rclpy initialized")
+    #     # Initialize with explicit domain ID
+    #     rclpy.init()
+    #     print("rclpy initialized")
         
-        # Create the node without context parameter
-        node = ROS2Subscriber(viewer)
-        print("ROS2 subscriber node created")
+    #     # Create the node without context parameter
+    #     node = ROS2Subscriber(viewer)
+    #     print("ROS2 subscriber node created")
         
-        # Use a more basic approach to spinning
-        try:
-            print("Starting manual node spinning")
-            while True:
-                rclpy.spin_once(node, timeout_sec=0.1)
-                time.sleep(0.01)
-        except KeyboardInterrupt:
-            pass
-        except Exception as e:
-            print(f"Error spinning node: {e}")
-        finally:
-            node.destroy_node()
-            rclpy.shutdown()
-    except Exception as e:
-        print(f"Error in ROS2 initialization: {e}")
-        traceback.print_exc()
+    #     # Use a more basic approach to spinning
+    #     try:
+    #         print("Starting manual node spinning")
+    #         while True:
+    #             rclpy.spin_once(node, timeout_sec=0.1)
+    #             time.sleep(0.01)
+    #     except KeyboardInterrupt:
+    #         pass
+    #     except Exception as e:
+    #         print(f"Error spinning node: {e}")
+    #     finally:
+    #         node.destroy_node()
+    #         rclpy.shutdown()
+    # except Exception as e:
+    #     print(f"Error in ROS2 initialization: {e}")
+    #     traceback.print_exc()
