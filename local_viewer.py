@@ -268,7 +268,7 @@ class LocalViewer(Mini3DViewer):
         self.expr_enabled = False
         self.create_blendshape_sliders()
 
-        self.splatting_visible = True
+        self.splatting_visible = False
 
         self.eyes_data = None
         self.avatar_path = None
@@ -625,7 +625,10 @@ class LocalViewer(Mini3DViewer):
                 blendshapes = np.array([self.blendshape_values[name] for name in ARKit_BLENDSHAPE_NAMES])
                 expressions, jaw = self.gaussians.flame_model.mask.convert_blendshapes_to_expressions(blendshapes)
                 self.flame_param['expr'] = expressions.unsqueeze(0)  # Add batch dimension
-                for i in range(len(jaw)): self.flame_param['jaw'][0, i] = jaw[i]
+                for i in range(len(jaw)): 
+                    self.flame_param['jaw'][0, i] = jaw[i]
+                    if i==0:
+                        self.flame_param['jaw'][0, i] += 0.03 
 
                 self.flame_param['neck'][0, 0] = 0.1 # Neck pitch a bit down for a more natural look
 
@@ -1017,7 +1020,7 @@ class LocalViewer(Mini3DViewer):
                 # show splatting
                 def callback_show_splatting(sender, app_data):
                     self.need_update = True
-                dpg.add_checkbox(label="show splatting", default_value=True, callback=callback_show_splatting, tag="_checkbox_show_splatting")
+                dpg.add_checkbox(label="show splatting", default_value=False, callback=callback_show_splatting, tag="_checkbox_show_splatting")
                 self.splatting_visible = dpg.get_value("_checkbox_show_splatting")
 
                 dpg.add_spacer(width=10)
