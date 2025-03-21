@@ -9,7 +9,7 @@ import traceback
 AVATAR_PATH = "/workspace/avatars/"
 
 OVR_ARKIT_BLENDSHAPES_MAP = {
-    "19": ("jawOpen", 2.0),
+    "19": ("jawOpen", 1.7),
     "50": ("cheekPuff", 1.0),  # Note: Cheek Suck L/R in old naming
     "88": ("browInnerUp", 1.0),  # Note: Used for both L/R in old naming
     "89": ("browDown_L", 1.0),
@@ -38,12 +38,12 @@ OVR_ARKIT_BLENDSHAPES_MAP = {
     "113": ("jawForward", 1.0),
     "114": ("jawLeft", 1.0),
     "115": ("jawRight", 1.0),
-    "116": ("mouthFunnel", 1.5),  # Note: Used for all funnel variants in old naming
-    "117": ("mouthPucker", 1.5),  # Note: Used for both L/R in old naming
-    "118": ("mouthLeft", 1.0),
-    "119": ("mouthRight", 1.0),
-    "120": ("mouthRollUpper", 0.8),  # Note: Lip Suck LT/RT in old naming
-    "121": ("mouthRollLower", 0.8),  # Note: Lip Suck LB/RB in old naming
+    "116": ("mouthFunnel", 2.0),  # Note: Used for all funnel variants in old naming
+    "117": ("mouthPucker", 2.0),  # Note: Used for both L/R in old naming
+    "118": ("mouthLeft", 1.3),
+    "119": ("mouthRight", 1.3),
+    "120": ("mouthRollUpper", 1.0),  # Note: Lip Suck LT/RT in old naming
+    "121": ("mouthRollLower", 1.0),  # Note: Lip Suck LB/RB in old naming
     "122": ("mouthShrugUpper", 1),
     "123": ("mouthShrugLower", 1),
     "124": ("mouthClose", 1.0),
@@ -66,7 +66,9 @@ OVR_ARKIT_BLENDSHAPES_MAP = {
 NAME_MAP = {
     "raf": "rafael3",
     "alona": "alona5",
-    "tatjana": "tatjan2"
+    "caya": "tatjana2",
+    "female": "martina",
+    "male": "tim"
 }
 
 # OVR_ARKIT_BLENDSHAPES_MAP = {
