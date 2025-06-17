@@ -62,13 +62,13 @@ def render(
         width=viewpoint_camera.image_width,
         height=viewpoint_camera.image_height,
         sh_degree=pc.active_sh_degree,
-        backgrounds=bg_color.unsqueeze(0),
+        backgrounds=bg_color,
     )
     render = render.squeeze(0).permute(2, 0, 1)
     alpha = alpha.squeeze(0).permute(2, 0, 1)
 
     radii = torch.zeros(means3D.shape[0], device=info["radii"].device, dtype=info["radii"].dtype)
-    radii[info["gaussian_ids"]] = info["radii"]
+    radii[info["gaussian_ids"]] = info["radii"].max(dim=1).values
     return {
         "render": render,
         "alpha": alpha,
