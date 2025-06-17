@@ -137,6 +137,9 @@ python local_viewer.py \
 
 </details>
 
+> [!WARNING]
+> The viewer is implemented in Python, making development convenient but not ideal for performance benchmarking. As such, please avoid using the viewer to measure the rendering frame rate of our method. Instead, use the [FPS benchmark script](https://github.com/ShenhanQian/GaussianAvatars/blob/main/doc/offline_render.md#fps-benchmark) for accurate performance evaluation.
+
 
 ### [3. Offline Rendering](doc/offline_render.md)
 
