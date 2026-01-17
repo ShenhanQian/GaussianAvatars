@@ -15,10 +15,13 @@ Our code and the pre-processed data relies on FLAME 2023. Please download [origi
 
 #### 1. Preprocessed NeRSemble Dataset
 
-In our paper, we use 9 subjects from the NeRSemble dataset. You can download the pre-processed data from
+In our paper, we use 9 subjects from the [NeRSemble](https://tobias-kirschstein.github.io/nersemble/) dataset. You can download the pre-processed data from
 
 - [LRZ](https://syncandshare.lrz.de/getlink/fiRXRYvdGQoC162RZDDaZc/release) (directly accessible)
 - [OneDrive](https://tumde-my.sharepoint.com/:f:/g/personal/shenhan_qian_tum_de/EtgO7DSNVzNKuYMRQeL4PE0BqMsTwdpQ09puewDLQBz87A) (request [here](https://forms.gle/dPEJx5DNvmhTm2Ry5)).
+
+> [!NOTE]
+> Please make sure to cite the NeRSemble dataset if you used our pre-processed data.
 
 #### 2. Custom data
 
